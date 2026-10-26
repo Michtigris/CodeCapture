@@ -1,0 +1,11 @@
+RewriteEngine On
+DirectoryIndex index.php
+
+RewriteRule ^(app|components|lib|node_modules|data|scripts|\.next|\.git)(/|$) - [F,L]
+RewriteRule \.(ts|tsx|mjs|json|map)$ - [F,L]
+
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteCond %{REQUEST_URI} !^/index\.php$
+RewriteRule ^ - [L]
+
+RewriteRule ^ index.php [L]
