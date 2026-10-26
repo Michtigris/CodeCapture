@@ -228,17 +228,26 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
 .group-head h1 { margin: 0; font-size: clamp(36px, 5vw, 56px); letter-spacing: -0.045em; }
 .creator { display: flex; gap: 8px; align-items: center; }
 .creator input { min-width: 220px; }
-.group-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.group-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 12px;
+  margin-bottom: 22px;
+}
 .card {
   padding: 16px;
   text-decoration: none;
   display: grid;
   gap: 8px;
   min-height: 150px;
+  min-width: 0;
+  overflow: hidden;
   align-content: space-between;
 }
+.card .row { min-width: 0; width: 100%; }
+.card .row > * { flex: 1 1 0; min-width: 0; max-width: 100%; }
 .card:hover { border-color: var(--lime); }
-.card h2 { margin: 0; font-size: 28px; letter-spacing: -0.04em; }
+.card h2 { margin: 0; font-size: 28px; letter-spacing: -0.04em; overflow-wrap: anywhere; }
 .card-meta { color: var(--muted); font-size: 13px; display: grid; gap: 4px; }
 .link-card { padding: 16px; margin-bottom: 22px; display: grid; gap: 8px; }
 .link-list { display: grid; gap: 8px; }
