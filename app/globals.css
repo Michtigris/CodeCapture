@@ -306,18 +306,21 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
 .insert-dot.bad { background: #e23d32; border-color: #e23d32; }
 .insert-dot.same { background: #f0a202; border-color: #f0a202; }
 .group-name {
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 700;
+  line-height: 1;
+  height: 26px;
   letter-spacing: -0.04em;
   background: transparent;
   border: none;
   padding: 0;
   width: auto;
-  min-width: 6ch;
+  min-width: 1.4ch;
   max-width: 280px;
+  field-sizing: content;
 }
 .groupbar > div:first-child { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; min-width: 0; }
-.group-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.group-title { display: flex; align-items: baseline; gap: 4px; min-width: 0; }
 .group-code {
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 12px;

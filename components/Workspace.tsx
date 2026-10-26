@@ -495,6 +495,7 @@ export function Workspace({ groupId }: { groupId: string }) {
               className="group-name"
               aria-label="Nom du groupe"
               value={name}
+              size={Math.max(name.length, 1)}
               maxLength={60}
               onChange={(event) => {
                 nameDirty.current = true;
