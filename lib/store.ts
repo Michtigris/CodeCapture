@@ -1,7 +1,8 @@
 import { randomInt, randomUUID } from "crypto";
 import fs from "fs";
 import path from "path";
-import { DEFAULT_BRIEF, DEFAULT_INTERVAL, DEFAULT_MODEL } from "./constants";
+import { DEFAULT_BRIEF, DEFAULT_INTERVAL, DEFAULT_MODEL, LEGACY_BRIEFS } from "./constants";
+import { cleanInsertName, fileStamp, INSERT_WEEK_MS } from "./insert";
 import { r2Configured, r2Del, r2Get, r2Put, R2Error } from "./r2";
 import type { ExtractedFile } from "./types";
 import { mimeFor, type ImageExt } from "./sniff";
@@ -140,6 +141,10 @@ function repairGroups(db: DB): boolean {
     }
     if (!group.memberIds.includes(group.userId)) {
       group.memberIds.push(group.userId);
+      changed = true;
+    }
+    if (LEGACY_BRIEFS.includes(group.brief)) {
+      group.brief = DEFAULT_BRIEF;
       changed = true;
     }
     const code = String(group.code || "").toUpperCase();
@@ -890,12 +895,14 @@ export function saveManualFile(input: {
       db.captures.push(capture);
     }
     const content = input.content.replace(/\0/g, "").slice(0, 200_000);
+    const now = new Date().toISOString();
     const existing = capture.files.find((file) => file.filename === filename);
     if (existing) {
       existing.content = content;
       existing.language = fileLanguage(filename);
+      existing.updatedAt = now;
     } else {
-      capture.files.push({ filename, language: fileLanguage(filename), content });
+      capture.files.push({ filename, language: fileLanguage(filename), content, updatedAt: now });
     }
     if (input.archivePending && content.trim()) {
       for (const photo of db.photos) {
@@ -905,6 +912,60 @@ export function saveManualFile(input: {
       }
     }
     return capture;
+  });
+}
+
+export function saveInsertedFiles(
+  groupId: string,
+  incoming: { filename: string; content: string }[],
+): Promise<{ captureId: string; filename: string }> {
+  return update((db) => {
+    const now = new Date().toISOString();
+    const nowMs = Date.now();
+    let focusCapture = "";
+    let focusName = "";
+    for (const item of incoming) {
+      const filename = cleanInsertName(item.filename);
+      if (!filename) throw new Error("Nom de fichier invalide.");
+      const content = item.content.replace(/\0/g, "").slice(0, 200_000);
+      const matches = db.captures
+        .filter((capture) => capture.groupId === groupId)
+        .flatMap((capture) =>
+          capture.files
+            .filter((file) => file.filename === filename)
+            .map((file) => ({ capture, file })),
+        )
+        .sort((a, b) => fileStamp(b.file.updatedAt, b.capture.createdAt) - fileStamp(a.file.updatedAt, a.capture.createdAt));
+      const open = matches.find((match) => nowMs - fileStamp(match.file.updatedAt, match.capture.createdAt) < INSERT_WEEK_MS);
+      const target = open ?? matches[0];
+      if (target) {
+        target.file.content = content;
+        target.file.language = fileLanguage(filename);
+        target.file.updatedAt = now;
+        focusCapture = target.capture.id;
+        focusName = filename;
+        continue;
+      }
+      let capture = db.captures
+        .filter((item) => item.groupId === groupId)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+      if (!capture) {
+        capture = {
+          id: randomUUID(),
+          groupId,
+          createdAt: now,
+          notes: "",
+          photoIds: [],
+          files: [],
+        };
+        db.captures.push(capture);
+      }
+      capture.files.push({ filename, language: fileLanguage(filename), content, updatedAt: now });
+      focusCapture = capture.id;
+      focusName = filename;
+    }
+    if (!focusCapture || !focusName) throw new Error("Rien à insérer.");
+    return { captureId: focusCapture, filename: focusName };
   });
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { fileStamp, INSERT_WEEK_MS } from "@/lib/insert";
 import { folderLabel, splitPath } from "@/lib/paths";
 import type { CaptureDTO, ExtractedFile, PhotoDTO } from "@/lib/types";
 import { copyText, downloadText } from "./copy";
@@ -61,6 +62,7 @@ type Props = {
   onSelectCapture: (id: string) => void;
   onSaveFile: (input: { captureId: string | null; filename: string; content: string; archivePending?: boolean }) => Promise<void>;
   onToast: (message: string) => void;
+  focusFile?: { name: string; nonce: number } | null;
 };
 
 function isNotepad(filename: string) {
@@ -70,12 +72,44 @@ function isNotepad(filename: string) {
 function tabLabel(filename: string) {
   const name = splitPath(filename).name;
   const numbered = name.match(/^(\d+)\.txt$/i);
-  return numbered ? numbered[1] : name;
+  return numbered ? numbered[1] : filename;
 }
 
-export function FileStage({ captures, photos, captureId, onSelectCapture, onSaveFile, onToast }: Props) {
+type Placed = {
+  file: ExtractedFile;
+  captureId: string;
+  at: number;
+  folder: string;
+};
+
+export function FileStage({ captures, photos, captureId, onSelectCapture, onSaveFile, onToast, focusFile }: Props) {
   const capture = captures.find((item) => item.id === captureId) ?? captures[0] ?? null;
   const files = capture?.files ?? EMPTY_FILES;
+  const placed = useMemo(() => {
+    const now = Date.now();
+    const rows: Placed[] = [];
+    for (const item of captures) {
+      for (const file of item.files) {
+        rows.push({
+          file,
+          captureId: item.id,
+          at: fileStamp(file.updatedAt, item.createdAt),
+          ...splitPath(file.filename),
+        });
+      }
+    }
+    rows.sort((a, b) => b.at - a.at);
+    const seen = new Set<string>();
+    const unique: Placed[] = [];
+    for (const row of rows) {
+      if (seen.has(row.file.filename)) continue;
+      seen.add(row.file.filename);
+      unique.push(row);
+    }
+    const open = unique.filter((row) => now - row.at < INSERT_WEEK_MS).sort((a, b) => a.at - b.at);
+    const history = unique.filter((row) => now - row.at >= INSERT_WEEK_MS);
+    return { open, history };
+  }, [captures]);
   const parsed = useMemo(() => files.map((file) => ({ ...file, ...splitPath(file.filename) })), [files]);
   const folders = useMemo(() => [...new Set(parsed.map((file) => file.folder))], [parsed]);
   const showFolders = folders.some((folder) => folder !== "");
@@ -94,18 +128,24 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
   const padRef = useRef<HTMLTextAreaElement>(null);
 
   if (seen !== captureKey) {
-    const stillThere = tab === CAPTURE_TAB || files.some((file) => file.filename === tab) || pads.includes(tab);
+    const stillThere =
+      tab === CAPTURE_TAB ||
+      captures.some((item) => item.files.some((file) => file.filename === tab)) ||
+      pads.includes(tab);
     setSeen(captureKey);
-    setFolder(parsed[0]?.folder ?? "");
-    if (!stillThere) setTab(CAPTURE_TAB);
+    if (!stillThere) {
+      setFolder(parsed[0]?.folder ?? "");
+      setTab(CAPTURE_TAB);
+    }
     setEditing(false);
     setMenu(false);
   }
 
-  const savedNames = useMemo(() => new Set(files.map((file) => file.filename)), [files]);
+  const savedNames = useMemo(() => new Set(captures.flatMap((item) => item.files.map((file) => file.filename))), [captures]);
   const openPads = pads.filter((name) => !savedNames.has(name));
-  const visible = parsed.filter((file) => !showFolders || file.folder === folder || isNotepad(file.filename));
-  const current = files.find((file) => file.filename === tab) ?? null;
+  const visible = placed.open;
+  const located = visible.find((row) => row.file.filename === tab) ?? placed.history.find((row) => row.file.filename === tab) ?? null;
+  const current = located?.file ?? null;
   const onCaptureTab = tab === CAPTURE_TAB;
   const onPad = isNotepad(tab) || openPads.includes(tab);
   const padValue = padText[tab] ?? current?.content ?? "";
@@ -120,6 +160,21 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
   useEffect(() => {
     if (onPad) padRef.current?.focus();
   }, [tab, onPad]);
+
+  const seenFocus = useRef(0);
+  useEffect(() => {
+    if (!focusFile || seenFocus.current === focusFile.nonce) return;
+    const row =
+      placed.open.find((item) => item.file.filename === focusFile.name) ??
+      placed.history.find((item) => item.file.filename === focusFile.name);
+    if (!row) return;
+    seenFocus.current = focusFile.nonce;
+    onSelectCapture(row.captureId);
+    setFolder(row.folder);
+    setTab(row.file.filename);
+    setEditing(false);
+    setMenu(false);
+  }, [focusFile, placed, onSelectCapture]);
 
   function chooseFolder(next: string) {
     setFolder(next);
@@ -214,7 +269,7 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
     event?.preventDefault();
     if (!current) return;
     try {
-      await onSaveFile({ captureId: capture?.id ?? null, filename: current.filename, content: draft });
+      await onSaveFile({ captureId: located?.captureId ?? capture?.id ?? null, filename: current.filename, content: draft });
       setEditing(false);
       setMenu(false);
     } catch (error) {
@@ -268,21 +323,23 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
         >
           Dernière capture
         </button>
-        {visible.map((file) => (
+        {visible.map((row) => (
           <button
-            key={file.filename}
+            key={row.file.filename}
             type="button"
             role="tab"
-            aria-selected={file.filename === tab}
-            className={file.filename === tab ? (isNotepad(file.filename) ? "tab on pad" : "tab on") : "tab"}
+            title={row.file.filename}
+            aria-selected={row.file.filename === tab}
+            className={row.file.filename === tab ? (isNotepad(row.file.filename) ? "tab on pad" : "tab on") : "tab"}
             onClick={() => {
-              setFolder(file.folder);
-              setTab(file.filename);
+              onSelectCapture(row.captureId);
+              setFolder(row.folder);
+              setTab(row.file.filename);
               setEditing(false);
               setMenu(false);
             }}
           >
-            {tabLabel(file.filename)}
+            {tabLabel(row.file.filename)}
           </button>
         ))}
         {openPads.map((name) => (
@@ -304,6 +361,31 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
           +
         </button>
       </div>
+      {placed.history.length ? (
+        <details className="file-history">
+          <summary>Historique · {placed.history.length}</summary>
+          <p className="hint">Les onglets de plus de 7 jours.</p>
+          <div className="tabs">
+            {placed.history.map((row) => (
+              <button
+                key={row.file.filename}
+                type="button"
+                title={row.file.filename}
+                className={row.file.filename === tab ? "tab on" : "tab"}
+                onClick={() => {
+                  onSelectCapture(row.captureId);
+                  setFolder(row.folder);
+                  setTab(row.file.filename);
+                  setEditing(false);
+                  setMenu(false);
+                }}
+              >
+                {tabLabel(row.file.filename)}
+              </button>
+            ))}
+          </div>
+        </details>
+      ) : null}
       {onCaptureTab ? (
         <div className="sheet capture">
           <div className="sheet-bar">

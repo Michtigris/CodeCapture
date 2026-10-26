@@ -1,6 +1,7 @@
 import { json } from "@/lib/http";
 import { getCurrentUser } from "@/lib/session";
-import { getGroup, isMember, saveManualFile } from "@/lib/store";
+import { getGroup, isMember, saveInsertedFiles, saveManualFile } from "@/lib/store";
+import { parseInsert } from "@/lib/insert";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +16,17 @@ export async function POST(request: Request, ctx: Ctx) {
   if (!group || !isMember(group, user.id)) return json({ error: "Groupe introuvable." }, 404);
 
   const body = await request.json().catch(() => null);
+  if (typeof body?.block === "string") {
+    const files = parseInsert(body.block);
+    if (!files) return json({ error: "Ce collage n'a pas la forme attendue." }, 400);
+    try {
+      const placed = await saveInsertedFiles(group.id, files);
+      return json(placed);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Enregistrement impossible.";
+      return json({ error: message }, 400);
+    }
+  }
   const filename = String(body?.filename ?? "");
   const content = String(body?.content ?? "");
   const captureId = body?.captureId ? String(body.captureId) : null;

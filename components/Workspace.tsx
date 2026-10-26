@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MAX_PHOTOS_PER_SEND } from "@/lib/constants";
+import { INSERT_DAY_MS, parseInsert } from "@/lib/insert";
 import type { GroupPayload, PublicUser } from "@/lib/types";
 import { CameraPane } from "./CameraPane";
 import { copyPhotoSet } from "./copy";
@@ -12,6 +13,31 @@ import { QrMark } from "./QrMark";
 import { formatWhen } from "./format";
 import { Toast, useToast } from "./toast";
 import { TopBar } from "./TopBar";
+
+function pasteKey(groupId: string) {
+  return `cc_paste_${groupId}`;
+}
+
+function loadPastes(groupId: string): { hash: string; at: number }[] {
+  try {
+    const raw = localStorage.getItem(pasteKey(groupId));
+    const list = raw ? (JSON.parse(raw) as { hash?: unknown; at?: unknown }[]) : [];
+    const now = Date.now();
+    if (!Array.isArray(list)) return [];
+    return list.filter(
+      (item): item is { hash: string; at: number } =>
+        !!item && typeof item.hash === "string" && typeof item.at === "number" && now - item.at < INSERT_DAY_MS,
+    );
+  } catch {
+    return [];
+  }
+}
+
+async function hashPaste(text: string): Promise<string> {
+  const bytes = new TextEncoder().encode(text.trim());
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 export function Workspace({ groupId }: { groupId: string }) {
   const { msg, toast } = useToast();
@@ -40,6 +66,10 @@ export function Workspace({ groupId }: { groupId: string }) {
   const nameDirty = useRef(false);
   const sendingRef = useRef(false);
   const [lotIndex, setLotIndex] = useState(0);
+  const [insertDot, setInsertDot] = useState<"idle" | "ok" | "bad" | "same">("idle");
+  const [focusFile, setFocusFile] = useState<{ name: string; nonce: number } | null>(null);
+  const insertLock = useRef(false);
+  const dotTimer = useRef(0);
   const seenShots = useRef(0);
   const pendingShots = (data?.photos ?? []).filter((photo) => !photo.captureId).length;
   const qrDismissed = useRef(false);
@@ -397,6 +427,58 @@ export function Workspace({ groupId }: { groupId: string }) {
   const pending = data.photos.filter((photo) => !photo.captureId).length;
   const target = Math.min(includeSent ? data.photos.length : pending, MAX_PHOTOS_PER_SEND);
   const needsKey = me ? !me.hasOpenAIKey : false;
+  function flashDot(state: "ok" | "bad" | "same", ms: number) {
+    window.clearTimeout(dotTimer.current);
+    setInsertDot(state);
+    dotTimer.current = window.setTimeout(() => setInsertDot("idle"), ms);
+  }
+
+  async function insertClipboard() {
+    if (insertLock.current) return;
+    insertLock.current = true;
+    window.setTimeout(() => {
+      insertLock.current = false;
+    }, 600);
+    let text = "";
+    try {
+      text = await navigator.clipboard.readText();
+    } catch {
+      flashDot("bad", 500);
+      toast("Le presse-papier est bloqué.");
+      return;
+    }
+    const files = parseInsert(text);
+    if (!files) {
+      flashDot("bad", 500);
+      return;
+    }
+    const pastes = loadPastes(groupId);
+    const hash = await hashPaste(text);
+    if (pastes.some((item) => item.hash === hash)) {
+      localStorage.setItem(pasteKey(groupId), JSON.stringify(pastes));
+      flashDot("same", 1000);
+      return;
+    }
+    const res = await fetch(`/api/groups/${groupId}/files`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ block: text }),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok || !payload.filename) {
+      flashDot("bad", 500);
+      return;
+    }
+    pastes.push({ hash, at: Date.now() });
+    localStorage.setItem(pasteKey(groupId), JSON.stringify(pastes));
+    setFollowLatest(false);
+    setCaptureId(payload.captureId);
+    setFocusFile({ name: payload.filename, nonce: Date.now() });
+    if (handheld) setPanel("fichiers");
+    flashDot("ok", 1000);
+    await reload();
+  }
+
   let label = "Envoyer à ChatGPT";
   if (sending) label = "Lecture des photos…";
   else if (needsKey) label = "Ajouter la clé OpenAI";
@@ -484,9 +566,12 @@ export function Workspace({ groupId }: { groupId: string }) {
           >
             Copier les photos
           </button>
-          <button type="button" className="ghost">
-            Insérer
-          </button>
+          <span className="insert-pair">
+            <button type="button" className="ghost" onClick={() => void insertClipboard()}>
+              Insérer
+            </button>
+            <span className={`insert-dot ${insertDot}`} aria-hidden="true" />
+          </span>
         </div>
       </div>
       {banner ? <p className="banner">{banner}</p> : null}
@@ -646,6 +731,7 @@ export function Workspace({ groupId }: { groupId: string }) {
             await reload();
           }}
           onToast={toast}
+          focusFile={focusFile}
         />
       </div>
       {openPhoto ? (

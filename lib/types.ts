@@ -2,6 +2,7 @@ export type ExtractedFile = {
   filename: string;
   language: string;
   content: string;
+  updatedAt?: string;
 };
 
 export type PhotoDTO = {
