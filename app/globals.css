@@ -664,8 +664,6 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
 .frame-meta { display: flex; justify-content: space-between; gap: 6px; padding: 6px 8px 8px; }
 .copied-mark { color: var(--lime); font-style: normal; }
 .frame-meta button { background: none; border: none; color: var(--muted); padding: 0; }
-.consignes { padding: 0 12px 12px; }
-.consignes summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
 .quiet { padding: 0 12px 12px; }
 
 .file-history { padding: 4px 8px 8px; }

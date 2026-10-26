@@ -47,8 +47,6 @@ export function Workspace({ groupId }: { groupId: string }) {
   const [missing, setMissing] = useState(false);
   const [panel, setPanel] = useState<"camera" | "photos" | "fichiers">("camera");
   const [name, setName] = useState("");
-  const [brief, setBrief] = useState("");
-  const [briefDirty, setBriefDirty] = useState(false);
   const [includeSent, setIncludeSent] = useState(false);
   const [sending, setSending] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
@@ -170,9 +168,8 @@ export function Workspace({ groupId }: { groupId: string }) {
   useEffect(() => {
     if (!data) return;
     if (!nameDirty.current) setName(data.group.name);
-    if (!briefDirty) setBrief(data.group.brief);
     document.title = `${data.group.name} · CodeCapture`;
-  }, [data, briefDirty]);
+  }, [data]);
 
   useEffect(() => {
     if (pendingShots > seenShots.current) setLotIndex(Math.max(0, pendingShots - 1));
@@ -268,17 +265,6 @@ export function Workspace({ groupId }: { groupId: string }) {
       nameDirty.current = false;
     } catch (error) {
       toast(error instanceof Error ? error.message : "Nom non enregistré.");
-    }
-  }
-
-  async function saveBrief() {
-    try {
-      await patchGroup({ brief });
-      setData((current) => (current ? { ...current, group: { ...current.group, brief } } : current));
-      setBriefDirty(false);
-      toast("Consignes enregistrées");
-    } catch (error) {
-      toast(error instanceof Error ? error.message : "Consignes non enregistrées.");
     }
   }
 
@@ -480,9 +466,10 @@ export function Workspace({ groupId }: { groupId: string }) {
     await reload();
   }
 
+  const groupBrief = data.group.brief;
   async function copyPrompt() {
-    const extra =
-      brief.trim() && brief.trim() !== DEFAULT_BRIEF.trim() ? `\n\nConsignes du groupe :\n${brief.trim()}` : "";
+    const note = groupBrief.trim();
+    const extra = note && note !== DEFAULT_BRIEF.trim() ? `\n\nConsignes du groupe :\n${note}` : "";
     try {
       await copyText(CHAT_PROMPT + extra);
       toast("Prompt copié");
@@ -659,19 +646,15 @@ export function Workspace({ groupId }: { groupId: string }) {
                       <img src={photo.url} alt={`Photo du ${formatWhen(photo.createdAt)}`} />
                     </button>
                   ) : (
-                    <p className="lot-hold">
-                      {data.photos.length
-                        ? "Lot vide. Les photos traitées sont dans l’historique."
-                        : "Aucune photo pour l’instant."}
-                    </p>
+                    <p className="lot-hold">En attente</p>
                   )}
                 </div>
-                <div className="frame-meta">
-                  <span>
-                    {photo ? formatWhen(photo.createdAt) : "En attente"}
-                    {photo && copied.has(photo.id) ? <em className="copied-mark"> · copiée</em> : null}
-                  </span>
-                  {photo ? (
+                {photo ? (
+                  <div className="frame-meta">
+                    <span>
+                      {formatWhen(photo.createdAt)}
+                      {copied.has(photo.id) ? <em className="copied-mark"> · copiée</em> : null}
+                    </span>
                     <button
                       type="button"
                       onClick={() => {
@@ -681,10 +664,8 @@ export function Workspace({ groupId }: { groupId: string }) {
                     >
                       {confirmId === photo.id ? "Confirmer" : "Retirer"}
                     </button>
-                  ) : (
-                    <span />
-                  )}
-                </div>
+                  </div>
+                ) : null}
               </article>
             );
           })()}
@@ -714,23 +695,6 @@ export function Workspace({ groupId }: { groupId: string }) {
               </div>
             </details>
           ) : null}
-          <details className="consignes">
-            <summary>Consignes pour l’agent</summary>
-            <label className="field">
-              <span>Ce que ChatGPT doit déjà savoir</span>
-              <textarea
-                value={brief}
-                maxLength={4000}
-                onChange={(event) => {
-                  setBriefDirty(true);
-                  setBrief(event.target.value);
-                }}
-              />
-            </label>
-            <button type="button" className="ghost" onClick={() => void saveBrief()} disabled={!briefDirty}>
-              Enregistrer les consignes
-            </button>
-          </details>
         </section>
         <CameraPane
           groupId={groupId}
