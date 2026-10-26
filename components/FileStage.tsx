@@ -110,11 +110,12 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
   const onPad = isNotepad(tab) || openPads.includes(tab);
   const padValue = padText[tab] ?? current?.content ?? "";
 
-  const pending = photos.filter((photo) => !photo.captureId);
-  const latestPhotos = pending.length
-    ? pending
-    : photos.filter((photo) => capture && photo.captureId === capture.id);
-  const latestPhoto = [...latestPhotos].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1) ?? null;
+  const latestPhoto = [...photos].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1) ?? null;
+
+  useEffect(() => {
+    setOcr("");
+    setOcrWords([]);
+  }, [latestPhoto?.id]);
 
   useEffect(() => {
     if (onPad) padRef.current?.focus();
@@ -322,7 +323,7 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
           {latestPhoto ? (
             <div className="capture-shot">
               <div className="ocr-stage">
-                <img src={latestPhoto.url} alt="Dernière capture" draggable={false} />
+                <img key={latestPhoto.id} src={latestPhoto.url} alt="Dernière capture" draggable={false} />
                 {ocrWords.length ? (
                   <div className="ocr-layer">
                     {ocrWords.map((word) => (

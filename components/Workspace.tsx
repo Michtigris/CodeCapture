@@ -40,6 +40,8 @@ export function Workspace({ groupId }: { groupId: string }) {
   const nameDirty = useRef(false);
   const sendingRef = useRef(false);
   const [lotIndex, setLotIndex] = useState(0);
+  const seenShots = useRef(0);
+  const pendingShots = (data?.photos ?? []).filter((photo) => !photo.captureId).length;
   const qrDismissed = useRef(false);
   const qrAdding = useRef(false);
   const qrBaseline = useRef(0);
@@ -140,6 +142,11 @@ export function Workspace({ groupId }: { groupId: string }) {
     if (!briefDirty) setBrief(data.group.brief);
     document.title = `${data.group.name} · CodeCapture`;
   }, [data, briefDirty]);
+
+  useEffect(() => {
+    if (pendingShots > seenShots.current) setLotIndex(Math.max(0, pendingShots - 1));
+    seenShots.current = pendingShots;
+  }, [pendingShots]);
 
   useEffect(() => {
     if (!data || !followLatest) return;
