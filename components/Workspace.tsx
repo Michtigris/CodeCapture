@@ -435,11 +435,7 @@ export function Workspace({ groupId }: { groupId: string }) {
           </p>
         </div>
         <div className="group-actions">
-          {needsKey ? (
-            <button type="button" className="lime" disabled={packing || target === 0} onClick={() => void preparePacket()}>
-              {packing ? "Préparation du PDF…" : target === 0 ? "Aucune photo en attente" : "Préparer le PDF pour ChatGPT"}
-            </button>
-          ) : (
+          {needsKey ? null : (
             <button type="button" className="lime" disabled={sending || target === 0} onClick={() => void send()}>
               {label}
             </button>
@@ -476,7 +472,7 @@ export function Workspace({ groupId }: { groupId: string }) {
           ) : null}
           <button
             type="button"
-            className="ghost"
+            className="lime"
             disabled={!data.photos.some((photo) => !photo.captureId)}
             onClick={() => {
               const waiting = data.photos.filter((photo) => !photo.captureId);
@@ -488,11 +484,9 @@ export function Workspace({ groupId }: { groupId: string }) {
           >
             Copier les photos
           </button>
-          {needsKey ? null : (
-            <p className="hint" style={{ margin: 0 }}>
-              Les photos partent vers l’API OpenAI, ou tu les copies pour les coller dans l’application.
-            </p>
-          )}
+          <button type="button" className="ghost">
+            Insérer
+          </button>
         </div>
       </div>
       {banner ? <p className="banner">{banner}</p> : null}
