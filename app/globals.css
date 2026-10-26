@@ -349,6 +349,7 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
   flex-direction: column;
   gap: 12px;
 }
+.side > .pane { flex: none; min-height: auto; }
 .pane-photos { overflow: visible; }
 .pane-files { grid-column: 2; grid-row: 1; }
 .viewfinder.filming { max-height: min(58vh, 520px); touch-action: none; }
