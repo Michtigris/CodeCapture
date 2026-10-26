@@ -73,6 +73,9 @@ export async function PATCH(request: Request, ctx: Ctx) {
   if (typeof body?.name === "string") {
     const name = body.name.trim();
     if (name.length < 1 || name.length > 60) return json({ error: "Nom de groupe invalide." }, 400);
+    if (name.toLowerCase() === access.user.email.toLowerCase()) {
+      return json({ error: "Le nom du groupe n'est pas l'email du compte." }, 400);
+    }
     patch.name = name;
   }
   if (typeof body?.brief === "string") {

@@ -759,9 +759,9 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
               ) : (
                 <>
                   <p>Place le téléphone devant l’écran, le tableau ou la feuille.</p>
-                  <button type="button" className="lime" onClick={() => void activate()}>
-                    Activer la caméra
-                  </button>
+                <button type="button" className="lime activate-cam" onClick={() => void activate()}>
+                  Activer la caméra
+                </button>
                 </>
               )}
             </div>
@@ -770,6 +770,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
         </div>
       ) : null}
       <div className="cam-controls">
+        {wide || ready ? (
         <label className="field">
           <span>{wide && !usingDesk ? "Une photo toutes les, pour l'appareil choisi" : "Une photo toutes les"}</span>
           <select
@@ -792,6 +793,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
             ))}
           </select>
         </label>
+        ) : null}
         {(!wide || usingDesk) && running ? (
           <p className="remain">
             {hidden ? "Série en pause — reviens sur cet onglet" : `Prochaine photo dans ${remain}`}
@@ -862,7 +864,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
               <Glyph name="roll" />
             </TipButton>
           </div>
-        ) : (
+        ) : ready ? (
           <>
             <div className="row">
               {!running ? (
@@ -903,7 +905,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
                 : "Garde cette page ouverte. Le même compte doit être connecté sur l’ordinateur."}
             </p>
           </>
-        )}
+        ) : null}
       </div>
       <input
         ref={fileRef}

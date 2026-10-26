@@ -65,6 +65,7 @@ export function Workspace({ groupId }: { groupId: string }) {
   const nameDirty = useRef(false);
   const sendingRef = useRef(false);
   const [lotIndex, setLotIndex] = useState(0);
+  const [nameLive, setNameLive] = useState(false);
   const [insertDot, setInsertDot] = useState<"idle" | "ok" | "bad" | "same">("idle");
   const [focusFile, setFocusFile] = useState<{ name: string; nonce: number } | null>(null);
   const insertLock = useRef(false);
@@ -257,6 +258,12 @@ export function Workspace({ groupId }: { groupId: string }) {
     if (!next || next === data.group.name) {
       setName(data.group.name);
       nameDirty.current = false;
+      return;
+    }
+    if (me && next.toLowerCase() === me.email.toLowerCase()) {
+      setName(data.group.name);
+      nameDirty.current = false;
+      toast("Le nom du groupe n'est pas l'email du compte.");
       return;
     }
     try {
@@ -494,9 +501,16 @@ export function Workspace({ groupId }: { groupId: string }) {
             <input
               className="group-name"
               aria-label="Nom du groupe"
+              name="group-label"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              readOnly={!nameLive}
               value={name}
               size={Math.max(name.length, 1)}
               maxLength={60}
+              onFocus={() => setNameLive(true)}
               onChange={(event) => {
                 nameDirty.current = true;
                 setName(event.target.value);
