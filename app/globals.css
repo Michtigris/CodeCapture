@@ -452,16 +452,18 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
   display: flex;
   flex-direction: column;
 }
-.phone-stage.sources { height: auto; max-height: 240px; }
+.phone-stage.sources { height: auto; max-height: 240px; min-height: 72px; margin: 0; }
+.source-box { margin: 0 12px; display: grid; justify-items: start; gap: 8px; }
 .pc-add {
-  width: 100%;
-  padding: 12px;
+  width: auto;
+  padding: 6px 10px;
+  font-size: 13px;
+  line-height: 1.2;
   background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--line);
-  color: var(--lime);
-  text-align: left;
+  border: 1px solid var(--line);
+  color: var(--text);
 }
+.pc-add:hover { border-color: var(--lime); color: var(--lime); }
 .source-row { display: flex; align-items: stretch; border-bottom: 1px solid var(--line); }
 .phone-stage .source-row > button:first-child { flex: 1; width: auto; min-width: 0; border-bottom: none; }
 .phone-stage .source-drop {
@@ -496,7 +498,7 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
   line-height: 1;
   font-weight: 700;
 }
-.phone-stage ul { list-style: none; margin: 0; padding: 0; overflow: auto; }
+.phone-stage ul { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 1; }
 .phone-stage li button {
   width: 100%;
   display: flex;
@@ -511,12 +513,6 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
 }
 .phone-stage li button span:last-child { color: var(--muted); font-size: 13px; }
 .phone-stage li button.on { color: var(--lime); }
-.phone-empty {
-  margin: 0;
-  padding: 14px 12px;
-  color: var(--muted);
-  border-bottom: 1px solid var(--line);
-}
 .phone-stage img { width: 100%; flex: 1; min-height: 0; object-fit: cover; display: block; }
 .phone-switch { display: flex; gap: 6px; padding: 8px; overflow: auto; border-bottom: 1px solid var(--line); }
 .phone-switch button {

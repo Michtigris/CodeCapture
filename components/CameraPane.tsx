@@ -669,15 +669,13 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
         {running || aimed ? <span className="tally">Série en cours</span> : null}
       </div>
       {layoutReady && wide ? (
-        <div className="phone-stage sources">
+        <div className="source-box">
           {usingDesk ? null : (
             <button type="button" className="pc-add" onClick={() => chooseSource("pc:chrome")}>
               Caméra de ce PC
             </button>
           )}
-          {pcCameras.length === 0 && linked.length === 0 ? (
-            <p className="phone-empty">Connecte un téléphone, ou utilise la caméra de ce PC.</p>
-          ) : (
+          <div className="phone-stage sources">
             <ul>
               {usingDesk
                 ? null
@@ -709,7 +707,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
                 </li>
               ))}
             </ul>
-          )}
+          </div>
         </div>
       ) : null}
       {layoutReady && (!wide || usingDesk) ? (
@@ -773,7 +771,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
       ) : null}
       <div className="cam-controls">
         <label className="field">
-          <span>{wide && !usingDesk ? "Une photo toutes les, pour le téléphone choisi" : "Une photo toutes les"}</span>
+          <span>{wide && !usingDesk ? "Une photo toutes les, pour l'appareil choisi" : "Une photo toutes les"}</span>
           <select
             className={pending?.action === "interval" ? "armed" : ""}
             value={String(wide && !usingDesk ? selected?.intervalSec || intervalSec : ownInterval)}
