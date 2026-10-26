@@ -668,7 +668,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
         <h2>Caméra</h2>
         {running || aimed ? <span className="tally">Série en cours</span> : null}
       </div>
-      {layoutReady && wide ? (
+      {layoutReady && wide && !usingDesk ? (
         <div className="source-box">
           {usingDesk ? null : (
             <button type="button" className="pc-add" onClick={() => chooseSource("pc:chrome")}>

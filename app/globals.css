@@ -501,7 +501,7 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
 .viewfinder.desk {
   height: 280px;
   aspect-ratio: auto;
-  margin: 8px 12px 0;
+  margin: 0 12px;
   max-height: none;
   background: #000;
 }
