@@ -25,6 +25,7 @@ export async function GET() {
         brief: group.brief,
         intervalSec: group.intervalSec,
         createdAt: group.createdAt,
+        copiedIds: group.copiedIds ?? [],
         photoCount: photos.length,
         pendingCount: photos.filter((photo) => !photo.captureId).length,
         fileCount: latest?.files.length ?? 0,

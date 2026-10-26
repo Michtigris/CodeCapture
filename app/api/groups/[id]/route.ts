@@ -1,7 +1,7 @@
 import { isInterval } from "@/lib/constants";
 import { json } from "@/lib/http";
 import { getCurrentUser } from "@/lib/session";
-import { getGroup, isMember, listLiveCameras, loadGroupBundle, updateGroup, deleteGroup } from "@/lib/store";
+import { getGroup, isMember, listLiveCameras, loadGroupBundle, pruneHistoryPhotos, rememberCopiedPhotos, updateGroup, deleteGroup } from "@/lib/store";
 import type { CaptureDTO, PhotoDTO } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -21,6 +21,7 @@ export async function GET(_request: Request, ctx: Ctx) {
   const { id } = await ctx.params;
   const access = await ownedGroup(id);
   if ("error" in access && access.error) return access.error;
+  await pruneHistoryPhotos();
   const bundle = await loadGroupBundle(id);
   if (!bundle) return json({ error: "Groupe introuvable." }, 404);
   const { group, photos, captures } = bundle;
@@ -46,6 +47,7 @@ export async function GET(_request: Request, ctx: Ctx) {
       brief: group.brief,
       intervalSec: group.intervalSec,
       createdAt: group.createdAt,
+      copiedIds: group.copiedIds ?? [],
     },
     photos: photoDTOs,
     captures: captureDTOs,
@@ -81,6 +83,11 @@ export async function PATCH(request: Request, ctx: Ctx) {
     const intervalSec = Number(body.intervalSec);
     if (!isInterval(intervalSec)) return json({ error: "Intervalle invalide." }, 400);
     patch.intervalSec = intervalSec;
+  }
+  if (Array.isArray(body?.copiedIds)) {
+    const ids = body.copiedIds.filter((item: unknown): item is string => typeof item === "string").slice(0, 24);
+    const copiedIds = await rememberCopiedPhotos(id, ids);
+    if (!Object.keys(patch).length) return json({ copiedIds });
   }
   const group = await updateGroup(id, patch);
   return json({ group });

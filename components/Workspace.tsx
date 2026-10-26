@@ -559,8 +559,20 @@ export function Workspace({ groupId }: { groupId: string }) {
             onClick={() => {
               const waiting = data.photos.filter((photo) => !photo.captureId);
               const shots = waiting.slice(-8);
-              void copyPhotoSet(shots.map((photo) => photo.url))
-                .then(() => toast(shots.length > 1 ? `${shots.length} photos copiées` : "Photo copiée"))
+              void copyPhotoSet(shots.map((photo) => ({ id: photo.id, url: photo.url })))
+                .then(async (ids) => {
+                  const res = await fetch(`/api/groups/${groupId}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ copiedIds: ids }),
+                  });
+                  if (!res.ok) {
+                    toast("Photos copiées, mais le lot n'a pas été noté.");
+                    return;
+                  }
+                  toast(ids.length > 1 ? `${ids.length} photos copiées` : "Photo copiée");
+                  await reload();
+                })
                 .catch((error) => toast(error instanceof Error ? error.message : "Copie impossible."));
             }}
           >
@@ -602,6 +614,7 @@ export function Workspace({ groupId }: { groupId: string }) {
           </div>
           {(() => {
             const shots = data.photos.filter((photo) => !photo.captureId);
+            const copied = new Set(data.group.copiedIds ?? []);
             const index = shots.length ? Math.min(lotIndex, shots.length - 1) : 0;
             const photo = shots[index];
             return (
@@ -634,7 +647,10 @@ export function Workspace({ groupId }: { groupId: string }) {
                   )}
                 </div>
                 <div className="frame-meta">
-                  <span>{photo ? formatWhen(photo.createdAt) : "En attente"}</span>
+                  <span>
+                    {photo ? formatWhen(photo.createdAt) : "En attente"}
+                    {photo && copied.has(photo.id) ? <em className="copied-mark"> · copiée</em> : null}
+                  </span>
                   {photo ? (
                     <button
                       type="button"

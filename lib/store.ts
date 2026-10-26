@@ -2,6 +2,7 @@ import { randomInt, randomUUID } from "crypto";
 import fs from "fs";
 import path from "path";
 import { DEFAULT_BRIEF, DEFAULT_INTERVAL, DEFAULT_MODEL, LEGACY_BRIEFS } from "./constants";
+import { chooseHistoryDrops } from "./history";
 import { cleanInsertName, fileStamp, INSERT_WEEK_MS } from "./insert";
 import { r2Configured, r2Del, r2Get, r2Put, R2Error } from "./r2";
 import type { ExtractedFile } from "./types";
@@ -33,6 +34,7 @@ export type GroupRecord = {
   brief: string;
   intervalSec: number;
   createdAt: string;
+  copiedIds: string[];
 };
 
 export type PhotoRecord = {
@@ -40,6 +42,7 @@ export type PhotoRecord = {
   groupId: string;
   createdAt: string;
   captureId: string | null;
+  archivedAt?: string;
   ext: ImageExt;
 };
 
@@ -145,6 +148,10 @@ function repairGroups(db: DB): boolean {
     }
     if (LEGACY_BRIEFS.includes(group.brief)) {
       group.brief = DEFAULT_BRIEF;
+      changed = true;
+    }
+    if (!Array.isArray(group.copiedIds)) {
+      group.copiedIds = [];
       changed = true;
     }
     const code = String(group.code || "").toUpperCase();
@@ -756,6 +763,7 @@ export function createGroup(userId: string, name: string): Promise<GroupRecord> 
       brief: DEFAULT_BRIEF,
       intervalSec: DEFAULT_INTERVAL,
       createdAt: new Date().toISOString(),
+      copiedIds: [],
     };
     db.groups.push(group);
     return group;
@@ -807,7 +815,89 @@ export function getPhoto(id: string): Promise<PhotoRecord | null> {
   return readThrough((db) => db.photos.find((photo) => photo.id === id) ?? null);
 }
 
+function diskFree(): number | null {
+  if (storageMode() !== "file") return null;
+  try {
+    const stat = fs.statfsSync(DATA_DIR);
+    return Number(stat.bavail) * Number(stat.bsize);
+  } catch {
+    return null;
+  }
+}
+
+function fileBytes(photo: PhotoRecord): number {
+  if (storageMode() !== "file") return 0;
+  try {
+    return fs.statSync(photoFile(photo)).size;
+  } catch {
+    return 0;
+  }
+}
+
+let prunedAt = 0;
+
+export async function pruneHistoryPhotos(force = false): Promise<void> {
+  if (!force && Date.now() - prunedAt < 60_000) return;
+  const victims = await update((db) => {
+    const drop = new Set(
+      chooseHistoryDrops(
+        db.photos.map((photo) => ({
+          id: photo.id,
+          createdAt: photo.createdAt,
+          archivedAt: photo.archivedAt,
+          captureId: photo.captureId,
+          bytes: fileBytes(photo),
+        })),
+        Date.now(),
+        diskFree(),
+      ),
+    );
+    if (!drop.size) return [] as PhotoRecord[];
+    const gone = db.photos.filter((photo) => drop.has(photo.id));
+    db.photos = db.photos.filter((photo) => !drop.has(photo.id));
+    for (const capture of db.captures) {
+      if (capture.photoIds.some((id) => drop.has(id))) {
+        capture.photoIds = capture.photoIds.filter((id) => !drop.has(id));
+      }
+    }
+    for (const group of db.groups) {
+      if (group.copiedIds.some((id) => drop.has(id))) {
+        group.copiedIds = group.copiedIds.filter((id) => !drop.has(id));
+      }
+    }
+    return gone;
+  });
+  prunedAt = Date.now();
+  await Promise.all(victims.map((photo) => removePhotoBytes(photo)));
+}
+
+function archivePhotos(db: DB, groupId: string, captureId: string, ids: Set<string>) {
+  if (!ids.size) return;
+  const capture = db.captures.find((item) => item.id === captureId && item.groupId === groupId);
+  const now = new Date().toISOString();
+  for (const photo of db.photos) {
+    if (photo.groupId !== groupId || photo.captureId || !ids.has(photo.id)) continue;
+    photo.captureId = captureId;
+    photo.archivedAt = now;
+    if (capture && !capture.photoIds.includes(photo.id)) capture.photoIds.push(photo.id);
+  }
+}
+
+export function rememberCopiedPhotos(groupId: string, ids: string[]): Promise<string[]> {
+  const wanted = [...new Set(ids)].slice(0, 24);
+  return update((db) => {
+    const group = db.groups.find((item) => item.id === groupId);
+    if (!group) return [];
+    const pending = new Set(
+      db.photos.filter((photo) => photo.groupId === groupId && !photo.captureId).map((photo) => photo.id),
+    );
+    group.copiedIds = wanted.filter((id) => pending.has(id));
+    return group.copiedIds;
+  });
+}
+
 export async function addPhoto(groupId: string, ext: ImageExt, bytes: Buffer): Promise<PhotoRecord> {
+  await pruneHistoryPhotos(true);
   const photo: PhotoRecord = {
     id: randomUUID(),
     groupId,
@@ -833,6 +923,9 @@ export async function deletePhoto(id: string): Promise<boolean> {
     const photo = db.photos.find((item) => item.id === id);
     if (!photo) return false;
     db.photos = db.photos.filter((item) => item.id !== id);
+    for (const group of db.groups) {
+      if (group.copiedIds.includes(id)) group.copiedIds = group.copiedIds.filter((item) => item !== id);
+    }
     return true;
   });
   if (removed && existing) await removePhotoBytes(existing);
@@ -905,11 +998,8 @@ export function saveManualFile(input: {
       capture.files.push({ filename, language: fileLanguage(filename), content, updatedAt: now });
     }
     if (input.archivePending && content.trim()) {
-      for (const photo of db.photos) {
-        if (photo.groupId !== input.groupId || photo.captureId) continue;
-        photo.captureId = capture.id;
-        if (!capture.photoIds.includes(photo.id)) capture.photoIds.push(photo.id);
-      }
+      const pending = db.photos.filter((photo) => photo.groupId === input.groupId && !photo.captureId);
+      archivePhotos(db, input.groupId, capture.id, new Set(pending.map((photo) => photo.id)));
     }
     return capture;
   });
@@ -965,6 +1055,11 @@ export function saveInsertedFiles(
       focusName = filename;
     }
     if (!focusCapture || !focusName) throw new Error("Rien à insérer.");
+    const group = db.groups.find((item) => item.id === groupId);
+    if (group?.copiedIds.length) {
+      archivePhotos(db, groupId, focusCapture, new Set(group.copiedIds));
+      group.copiedIds = [];
+    }
     return { captureId: focusCapture, filename: focusName };
   });
 }
@@ -985,9 +1080,7 @@ export function addCapture(input: {
       files: input.files,
     };
     db.captures.push(capture);
-    for (const photo of db.photos) {
-      if (input.photoIds.includes(photo.id)) photo.captureId = capture.id;
-    }
+    archivePhotos(db, input.groupId, capture.id, new Set(input.photoIds));
     return capture;
   });
 }

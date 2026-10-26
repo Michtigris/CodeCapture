@@ -27,6 +27,7 @@ export type GroupDTO = {
   brief: string;
   intervalSec: number;
   createdAt: string;
+  copiedIds: string[];
 };
 
 export type CameraDTO = {

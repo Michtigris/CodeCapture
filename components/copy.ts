@@ -15,15 +15,17 @@ export async function copyText(text: string) {
   }
 }
 
-export async function copyPhotoSet(urls: string[]): Promise<void> {
-  if (!urls.length) throw new Error("Aucune photo à copier.");
+export async function copyPhotoSet(shots: { id: string; url: string }[]): Promise<string[]> {
+  if (!shots.length) throw new Error("Aucune photo à copier.");
   if (!navigator.clipboard?.write) throw new Error("Ce navigateur ne copie pas les images.");
+  const copied: string[] = [];
   const png = (async () => {
     const bitmaps: ImageBitmap[] = [];
-    for (const url of urls.slice(0, 8)) {
-      const res = await fetch(url);
+    for (const shot of shots.slice(0, 8)) {
+      const res = await fetch(shot.url);
       if (!res.ok) continue;
       bitmaps.push(await createImageBitmap(await res.blob()));
+      copied.push(shot.id);
     }
     if (!bitmaps.length) throw new Error("Photos introuvables.");
     const width = 1100;
@@ -48,6 +50,7 @@ export async function copyPhotoSet(urls: string[]): Promise<void> {
     return blob;
   })();
   await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+  return copied;
 }
 
 export function downloadText(filename: string, content: string) {
