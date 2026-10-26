@@ -29,6 +29,8 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   const followRef = useRef(true);
   const pinchRef = useRef<{ dist: number; zoom: number } | null>(null);
   const hardwareZoomRef = useRef<number | null>(null);
+  const zoomRangeRef = useRef<ZoomRange | null>(null);
+  const nativeBrokenRef = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const nativeRef = useRef<HTMLInputElement>(null);
   const onCaptureRef = useRef(onCapture);
@@ -184,14 +186,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: { ideal: nextFacing },
-          width: { ideal: 1920 },
-          height: { ideal: 1440 },
-        },
-      });
+      const stream = await openPhoneCamera(nextFacing);
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = stream;
       const video = videoRef.current;
@@ -199,14 +194,18 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
       video.srcObject = stream;
       await video.play();
       const track = stream.getVideoTracks()[0];
-      const caps = track?.getCapabilities?.() as { focusMode?: string[] } | undefined;
-      if (track && caps?.focusMode?.includes("continuous")) {
+      let range = track ? zoomRangeOf(track) : null;
+      if (track && !range) {
         try {
-          await track.applyConstraints({ advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet] });
+          await track.applyConstraints({ advanced: [{ zoom: 1 } as MediaTrackConstraintSet] });
+          range = zoomRangeOf(track);
         } catch {
-          /* le navigateur garde sa mise au point */
+          range = null;
         }
       }
+      zoomRangeRef.current = range;
+      nativeBrokenRef.current = !range;
+      if (track) await focusTrack(track).catch(() => undefined);
       zoomRef.current = 1;
       hardwareZoomRef.current = null;
       cropRef.current = FULL;
@@ -311,29 +310,15 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
           lock = null;
           misses = 0;
         }
-        const track = streamRef.current?.getVideoTracks()[0];
-        const caps = track?.getCapabilities?.() as { zoom?: { min: number; max: number } } | undefined;
-        let zoom = zoomRef.current;
-        if (track && caps?.zoom) {
-          const wanted = followRef.current
-            ? caps.zoom.min
-            : Math.min(caps.zoom.max, Math.max(caps.zoom.min, zoomRef.current));
-          if (wanted !== hardwareZoomRef.current) {
-            hardwareZoomRef.current = wanted;
-            void track.applyConstraints({ advanced: [{ zoom: wanted } as MediaTrackConstraintSet] }).catch(() => {
-              hardwareZoomRef.current = null;
-            });
-          }
-          if (!followRef.current) {
-            const factor = wanted / Math.max(caps.zoom.min, 0.01);
-            zoom = zoomRef.current / Math.max(factor, 1);
-          }
-        }
+        const range = zoomRangeRef.current;
+        const native = range && !nativeBrokenRef.current ? nativeZoomFor(zoomRef.current, range) : null;
+        if (native != null) pushNativeZoom();
+        const digital = native ? zoomRef.current / Math.max(native, 0.01) : zoomRef.current;
         const center =
           followRef.current && base.w < 0.98
             ? { x: base.x + base.w / 2, y: base.y + base.h / 2 }
             : undefined;
-        const crop = frameAtZoom(zoom, center);
+        const crop = frameAtZoom(Math.max(1, digital), center);
         cropRef.current = crop;
         placeVideo(video, finder, crop, facingRef.current === "user");
         const nextMag = zoomRef.current;
@@ -369,6 +354,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
       const nextZoom = clampZoom(pinchRef.current.zoom * (distance(event.touches) / pinchRef.current.dist));
       zoomRef.current = nextZoom;
       setMag(nextZoom);
+      pushNativeZoom();
     };
     const end = () => {
       pinchRef.current = null;
@@ -385,6 +371,19 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     };
   }, [ready, wide]);
 
+  function pushNativeZoom() {
+    const track = streamRef.current?.getVideoTracks()[0];
+    const range = zoomRangeRef.current;
+    if (!track || !range || nativeBrokenRef.current) return;
+    const native = nativeZoomFor(zoomRef.current, range);
+    if (hardwareZoomRef.current != null && Math.abs(hardwareZoomRef.current - native) < 0.03) return;
+    hardwareZoomRef.current = native;
+    void applyDeviceZoom(track, native).catch(() => {
+      nativeBrokenRef.current = true;
+      hardwareZoomRef.current = null;
+    });
+  }
+
   function toggleFollow() {
     const next = !followRef.current;
     followRef.current = next;
@@ -399,6 +398,8 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     setLocked(false);
     zoomRef.current = 1;
     hardwareZoomRef.current = null;
+    zoomRangeRef.current = null;
+    nativeBrokenRef.current = false;
     cropRef.current = FULL;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
@@ -483,6 +484,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
                   const nextZoom = clampZoom(Number(event.target.value));
                   zoomRef.current = nextZoom;
                   setMag(nextZoom);
+                  pushNativeZoom();
                 }}
               />
               <span>×{mag.toFixed(1)}</span>
@@ -612,7 +614,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
             </div>
             <p className="hint">
               {ready
-                ? "Curseur de ×1 à ×10, ou pince l’image. Suivi garde le tableau au centre."
+                ? "Le curseur zoome avec l’appareil du téléphone, qui refait la mise au point."
                 : "Garde cette page ouverte. Le même compte doit être connecté sur l’ordinateur."}
             </p>
           </>
@@ -642,6 +644,74 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
       />
     </section>
   );
+}
+
+type ZoomRange = { min: number; max: number; step?: number };
+
+function zoomRangeOf(track: MediaStreamTrack): ZoomRange | null {
+  const caps = track.getCapabilities?.() as { zoom?: ZoomRange } | undefined;
+  const zoom = caps?.zoom;
+  if (zoom && zoom.max > zoom.min) return zoom;
+  const supported = navigator.mediaDevices?.getSupportedConstraints?.() as { zoom?: boolean } | undefined;
+  if (supported?.zoom) return { min: 1, max: 10, step: 0.1 };
+  return null;
+}
+
+function nativeZoomFor(slider: number, range: ZoomRange): number {
+  const clamped = Math.min(range.max, Math.max(range.min, slider));
+  if (!range.step || range.step <= 0) return clamped;
+  const steps = Math.round((clamped - range.min) / range.step);
+  return Math.min(range.max, Math.max(range.min, range.min + steps * range.step));
+}
+
+async function openPhoneCamera(facing: "environment" | "user") {
+  const supported = navigator.mediaDevices.getSupportedConstraints?.() ?? {};
+  const base: MediaTrackConstraints = {
+    facingMode: { ideal: facing },
+    width: { ideal: 1920 },
+    height: { ideal: 1440 },
+  };
+  const video = {
+    ...base,
+    ...("zoom" in supported ? { zoom: { ideal: 1 } } : {}),
+    ...("focusMode" in supported ? { focusMode: "continuous" } : {}),
+  } as MediaTrackConstraints;
+  try {
+    return await navigator.mediaDevices.getUserMedia({ audio: false, video });
+  } catch (error) {
+    const name = error instanceof DOMException ? error.name : "";
+    if (name === "NotAllowedError" || name === "NotFoundError" || name === "NotReadableError") throw error;
+    return navigator.mediaDevices.getUserMedia({ audio: false, video: base });
+  }
+}
+
+async function focusTrack(track: MediaStreamTrack) {
+  const caps = track.getCapabilities?.() as {
+    focusMode?: string[];
+    pointsOfInterest?: unknown;
+  } | undefined;
+  const advanced: Record<string, unknown> = {};
+  if (caps?.focusMode?.includes("continuous")) advanced.focusMode = "continuous";
+  else if (caps?.focusMode?.includes("single-shot")) advanced.focusMode = "single-shot";
+  if (caps?.pointsOfInterest) advanced.pointsOfInterest = [{ x: 0.5, y: 0.5 }];
+  if (!Object.keys(advanced).length) return;
+  await track.applyConstraints({ advanced: [advanced as MediaTrackConstraintSet] });
+}
+
+async function applyDeviceZoom(track: MediaStreamTrack, zoom: number) {
+  const caps = track.getCapabilities?.() as { focusMode?: string[] } | undefined;
+  if (caps?.focusMode?.includes("continuous")) {
+    try {
+      await track.applyConstraints({
+        advanced: [{ zoom, focusMode: "continuous" } as MediaTrackConstraintSet],
+      });
+      return;
+    } catch {
+      /* le zoom seul, puis la mise au point */
+    }
+  }
+  await track.applyConstraints({ advanced: [{ zoom } as MediaTrackConstraintSet] });
+  await focusTrack(track).catch(() => undefined);
 }
 
 function explainCamera(error: unknown): string {
