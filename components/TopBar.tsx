@@ -4,7 +4,7 @@ import Link from "next/link";
 import { dropSession } from "./keepSession";
 import { Mark } from "./Mark";
 
-export function TopBar({ email }: { email?: string }) {
+export function TopBar({ name }: { name?: string }) {
   async function logout() {
     dropSession();
     await fetch("/api/auth/logout", { method: "POST" });
@@ -18,7 +18,7 @@ export function TopBar({ email }: { email?: string }) {
         CodeCapture
       </Link>
       <div className="top-actions">
-        {email ? <span className="who">{email}</span> : null}
+        {name ? <span className="who">{name}</span> : null}
         <Link href="/groupes">Groupes</Link>
         <Link href="/reglages">Réglages</Link>
         <button type="button" onClick={logout}>

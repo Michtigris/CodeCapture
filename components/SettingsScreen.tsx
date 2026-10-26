@@ -91,7 +91,7 @@ export function SettingsScreen() {
 
   return (
     <main className="page">
-      <TopBar email={me.email} />
+      <TopBar name={me.name} />
       <div className="wrap" style={{ maxWidth: 720 }}>
         <p className="kicker">Compte</p>
         <h1 className="display" style={{ fontSize: "clamp(36px, 5vw, 56px)", letterSpacing: "-0.045em", marginTop: 8 }}>

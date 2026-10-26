@@ -393,7 +393,7 @@ export function Workspace({ groupId }: { groupId: string }) {
   if (missing) {
     return (
       <main className="page">
-        <TopBar email={me?.email} />
+        <TopBar name={me?.name} />
         <div className="wrap">
           <h1>Groupe introuvable</h1>
           <Link href="/groupes">Retour aux groupes</Link>
@@ -405,7 +405,7 @@ export function Workspace({ groupId }: { groupId: string }) {
   if (!data) {
     return (
       <main className="page">
-        <TopBar email={me?.email} />
+        <TopBar name={me?.name} />
         <p className="boot wrap">Chargement du groupe…</p>
       </main>
     );
@@ -487,7 +487,7 @@ export function Workspace({ groupId }: { groupId: string }) {
 
   return (
     <main className="page workspace" data-panel={panel}>
-      <TopBar email={me?.email} />
+      <TopBar name={me?.name} />
       <div className="groupbar">
         <div>
           <div className="group-title">

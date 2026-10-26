@@ -147,7 +147,7 @@ export function GroupsScreen() {
 
   return (
     <main className="page">
-      <TopBar email={me.email} />
+      <TopBar name={me.name} />
       <div className="wrap">
         {error ? <p className="form-error">{error}</p> : null}
         {ordered.length === 0 ? (
