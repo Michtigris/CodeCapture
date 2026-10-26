@@ -488,11 +488,11 @@ export function Workspace({ groupId }: { groupId: string }) {
           >
             Copier les photos
           </button>
-          <p className="hint" style={{ margin: 0 }}>
-            {needsKey
-              ? "Sans clé API : copie les photos et colle-les dans ChatGPT, ou prépare le PDF."
-              : "Les photos partent vers l’API OpenAI, ou tu les copies pour les coller dans l’application."}
-          </p>
+          {needsKey ? null : (
+            <p className="hint" style={{ margin: 0 }}>
+              Les photos partent vers l’API OpenAI, ou tu les copies pour les coller dans l’application.
+            </p>
+          )}
         </div>
       </div>
       {banner ? <p className="banner">{banner}</p> : null}

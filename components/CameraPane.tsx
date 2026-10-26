@@ -59,8 +59,6 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   const [viewMag, setViewMag] = useState(1);
   const [pending, setPending] = useState<{ action: string; id: number } | null>(null);
   const [pcCameras, setPcCameras] = useState<PcCamera[]>([]);
-  const [choices, setChoices] = useState<PcCamera[]>([]);
-  const [picking, setPicking] = useState(false);
   const [storedReady, setStoredReady] = useState(false);
   const ackRef = useRef(0);
   const streamDeviceRef = useRef("");
@@ -251,33 +249,35 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     }
   }
 
-  async function openDesk(mediaId: string) {
+  async function openDesk() {
     setCameraError("");
     if (!navigator.mediaDevices?.getUserMedia) {
       setCameraError("Ce navigateur ne donne pas accès à la caméra.");
       return;
     }
-    if (streamDeviceRef.current === mediaId && streamRef.current && videoRef.current?.srcObject) {
-      setReady(true);
-      return;
-    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
-        video: { deviceId: { exact: mediaId }, width: { ideal: 1920 }, height: { ideal: 1440 } },
+        video: { width: { ideal: 1920 }, height: { ideal: 1440 } },
       });
-      if (selectedIdRef.current !== `pc:${mediaId}`) {
+      if (!selectedIdRef.current.startsWith("pc:")) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
-      streamRef.current?.getTracks().forEach((track) => track.stop());
+      const track = stream.getVideoTracks()[0];
+      const mediaId = track?.getSettings?.().deviceId || "chrome";
+      const label = track?.label?.trim().slice(0, 80) || "Caméra de ce PC";
+      streamRef.current?.getTracks().forEach((item) => item.stop());
       streamRef.current = stream;
       streamDeviceRef.current = mediaId;
       const video = videoRef.current;
-      if (!video) return;
+      if (!video) {
+        stream.getTracks().forEach((item) => item.stop());
+        streamRef.current = null;
+        return;
+      }
       video.srcObject = stream;
       await video.play();
-      const track = stream.getVideoTracks()[0];
       const range = track ? zoomRangeOf(track) : null;
       zoomRangeRef.current = range;
       nativeBrokenRef.current = !range;
@@ -289,6 +289,11 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
       setViewMag(1);
       setLocked(false);
       setReady(true);
+      const saved = [{ id: mediaId, label }];
+      writePcCameras(saved);
+      setPcCameras(saved);
+      selectedIdRef.current = `pc:${mediaId}`;
+      setSelectedId(`pc:${mediaId}`);
     } catch (error) {
       streamDeviceRef.current = "";
       setReady(false);
@@ -382,12 +387,9 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   }, [groupId, ownInterval, ownerName]);
 
   useEffect(() => {
-    if (!wide) return;
-    if (!selectedId.startsWith("pc:")) return;
-    const wanted = armDesk.current;
-    if (!wanted || `pc:${wanted}` !== selectedId) return;
+    if (!wide || !armDesk.current || !selectedId.startsWith("pc:")) return;
     armDesk.current = "";
-    void openDesk(wanted);
+    void openDesk();
   }, [wide, selectedId]);
 
   useEffect(() => {
@@ -542,13 +544,13 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     }
   }
 
-  async function startDesk(mediaId: string) {
+  async function startDesk() {
     followRef.current = true;
     setFollow(true);
     setOwnInterval(60);
     onIntervalChange(60);
     greetedRef.current = true;
-    await openDesk(mediaId);
+    if (!streamRef.current) await openDesk();
     if (!streamRef.current) return;
     setRunning(true);
     try {
@@ -559,25 +561,17 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   }
 
   function chooseSource(id: string) {
-    setSelectedId(id);
-    if (!id.startsWith("pc:")) return;
-    armDesk.current = id.slice(3);
-    if (selectedId === id) {
-      armDesk.current = "";
-      void openDesk(id.slice(3));
+    if (id.startsWith("pc:")) {
+      if (selectedId.startsWith("pc:")) {
+        void openDesk();
+        return;
+      }
+      armDesk.current = "chrome";
+      selectedIdRef.current = "pc:chrome";
+      setSelectedId("pc:chrome");
+      return;
     }
-  }
-
-  function rememberPc(camera: PcCamera) {
-    setPcCameras((current) => {
-      const next = current.some((item) => item.id === camera.id)
-        ? current.map((item) => (item.id === camera.id ? camera : item))
-        : [...current, camera];
-      writePcCameras(next);
-      return next;
-    });
-    setPicking(false);
-    chooseSource(`pc:${camera.id}`);
+    setSelectedId(id);
   }
 
   function forgetPc(id: string) {
@@ -590,32 +584,6 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
       disableCamera();
       setSelectedId("");
       writeCameraChoice("");
-    }
-  }
-
-  async function beginPick() {
-    setCameraError("");
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraError("Ce navigateur ne donne pas accès à la caméra.");
-      return;
-    }
-    setPicking(true);
-    let probe: MediaStream | null = null;
-    try {
-      if (!streamRef.current) {
-        probe = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
-      }
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const found = devices
-        .filter((item) => item.kind === "videoinput" && item.deviceId)
-        .map((item, index) => ({ id: item.deviceId, label: item.label.trim().slice(0, 80) || `Caméra ${index + 1}` }));
-      setChoices(found);
-      if (!found.length) setCameraError("Aucune caméra détectée sur ce PC.");
-    } catch (error) {
-      setPicking(false);
-      setCameraError(explainCamera(error));
-    } finally {
-      probe?.getTracks().forEach((track) => track.stop());
     }
   }
 
@@ -645,7 +613,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     if (!wide || !storedReady) return;
     const pcIds = pcKey ? pcKey.split("|").map((id) => `pc:${id}`) : [];
     const phoneIds = phoneKey ? phoneKey.split("|") : [];
-    if (pcIds.includes(selectedId) || phoneIds.includes(selectedId)) return;
+    if (selectedId.startsWith("pc:") || phoneIds.includes(selectedId)) return;
     const next = pcIds[0] || phoneIds[0] || "";
     if (next !== selectedId) setSelectedId(next);
   }, [wide, storedReady, pcKey, phoneKey, selectedId]);
@@ -681,23 +649,11 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
       </div>
       {layoutReady && wide ? (
         <div className="phone-stage sources">
-          <button type="button" className="pc-add" onClick={() => void beginPick()}>
-            Inscrire une caméra de ce PC
+          <button type="button" className="pc-add" onClick={() => chooseSource("pc:chrome")}>
+            Caméra de ce PC
           </button>
-          {picking ? (
-            <ul>
-              {choices.map((camera) => (
-                <li key={camera.id}>
-                  <button type="button" onClick={() => rememberPc(camera)}>
-                    <span>{camera.label}</span>
-                    <span>Choisir</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {pcCameras.length === 0 && linked.length === 0 && !picking ? (
-            <p className="phone-empty">Inscris la caméra au-dessus du PC, ou connecte un téléphone.</p>
+          {pcCameras.length === 0 && linked.length === 0 ? (
+            <p className="phone-empty">Connecte un téléphone, ou utilise la caméra de ce PC.</p>
           ) : (
             <ul>
               {pcCameras.map((camera) => (
@@ -823,7 +779,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
                   <Glyph name="stop" />
                 </TipButton>
               ) : (
-                <TipButton label="Démarrer le cycle" className="icon-btn lime" disabled={!deskId} onClick={() => void startDesk(deskId)}>
+                <TipButton label="Démarrer le cycle" className="icon-btn lime" disabled={!deskId} onClick={() => void startDesk()}>
                   <Glyph name="play" />
                 </TipButton>
               )
