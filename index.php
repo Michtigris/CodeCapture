@@ -51,6 +51,20 @@ $headers[] = "Host: $publicHost";
 $headers[] = "X-Forwarded-Host: $publicHost";
 $headers[] = "X-Forwarded-Proto: https";
 $headers[] = "X-Forwarded-For: " . ($_SERVER["REMOTE_ADDR"] ?? "127.0.0.1");
+$contentType = $_SERVER["CONTENT_TYPE"] ?? "";
+$multipart = !in_array($method, ["GET", "HEAD"], true) && stripos($contentType, "multipart/form-data") !== false;
+if ($multipart && (int) ($_SERVER["CONTENT_LENGTH"] ?? 0) > 0 && $_FILES === [] && $_POST === []) {
+    http_response_code(413);
+    header("Content-Type: application/json; charset=utf-8");
+    echo json_encode(["error" => "Cette photo est trop lourde."], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+if ($multipart) {
+    $headers = array_values(array_filter(
+        $headers,
+        static fn (string $header): bool => !str_starts_with(strtolower($header), "content-type:"),
+    ));
+}
 curl_setopt_array($handle, [
     CURLOPT_CUSTOMREQUEST => $method,
     CURLOPT_RETURNTRANSFER => true,
@@ -62,7 +76,21 @@ curl_setopt_array($handle, [
 if ($method === "HEAD") {
     curl_setopt($handle, CURLOPT_NOBODY, true);
 }
-if (!in_array($method, ["GET", "HEAD"], true)) {
+if ($multipart) {
+    $fields = [];
+    foreach ($_POST as $key => $value) {
+        if (is_string($key) && is_string($value)) $fields[$key] = $value;
+    }
+    foreach ($_FILES as $key => $file) {
+        if (!is_string($key) || !is_array($file)) continue;
+        $tmp = $file["tmp_name"] ?? "";
+        if (!is_string($tmp) || $tmp === "" || ($file["error"] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) continue;
+        $type = is_string($file["type"] ?? null) && $file["type"] !== "" ? $file["type"] : "application/octet-stream";
+        $name = is_string($file["name"] ?? null) && $file["name"] !== "" ? $file["name"] : "photo.jpg";
+        $fields[$key] = new CURLFile($tmp, $type, $name);
+    }
+    curl_setopt($handle, CURLOPT_POSTFIELDS, $fields);
+} elseif (!in_array($method, ["GET", "HEAD"], true)) {
     curl_setopt($handle, CURLOPT_POSTFIELDS, file_get_contents("php://input") ?: "");
 }
 $response = curl_exec($handle);
