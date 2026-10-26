@@ -390,17 +390,19 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
         <div className="sheet capture">
           <div className="sheet-bar">
             <strong>Dernière capture</strong>
-            <div className="sheet-actions">
-              <button type="button" onClick={() => void readText()} disabled={reading || !latestPhoto}>
-                {reading ? "Lecture…" : "Lire le texte"}
-              </button>
-              <button type="button" onClick={() => void copyText(ocr).then(() => onToast("Texte copié"))} disabled={!ocr}>
-                Copier tout
-              </button>
-              <button type="button" onClick={() => void copySelection()} disabled={!ocr}>
-                Copier la sélection
-              </button>
-            </div>
+            {latestPhoto ? (
+              <div className="sheet-actions">
+                <button type="button" onClick={() => void readText()} disabled={reading}>
+                  {reading ? "Lecture…" : "Lire le texte"}
+                </button>
+                <button type="button" onClick={() => void copyText(ocr).then(() => onToast("Texte copié"))} disabled={!ocr}>
+                  Copier tout
+                </button>
+                <button type="button" onClick={() => void copySelection()} disabled={!ocr}>
+                  Copier la sélection
+                </button>
+              </div>
+            ) : null}
           </div>
           {latestPhoto ? (
             <div className="capture-shot">
