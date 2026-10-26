@@ -6,7 +6,7 @@ import type { CameraDTO } from "@/lib/types";
 import { deviceId } from "./device";
 import { formatRemain } from "./format";
 import { fileToJpeg, frameFromVideo } from "./images";
-import { applyZoom, clampZoom, detectTarget, FULL, placeVideo, smoothLock, type NormRect } from "./targetLock";
+import { clampZoom, detectTarget, frameAtZoom, FULL, placeVideo, smoothLock, type NormRect } from "./targetLock";
 import { TipButton } from "./TipButton";
 
 type Props = {
@@ -313,22 +313,30 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
         }
         const track = streamRef.current?.getVideoTracks()[0];
         const caps = track?.getCapabilities?.() as { zoom?: { min: number; max: number } } | undefined;
-        const optical = !followRef.current && !!caps?.zoom;
+        let zoom = zoomRef.current;
         if (track && caps?.zoom) {
-          const wanted = optical
-            ? Math.min(caps.zoom.max, Math.max(caps.zoom.min, zoomRef.current))
-            : caps.zoom.min;
+          const wanted = followRef.current
+            ? caps.zoom.min
+            : Math.min(caps.zoom.max, Math.max(caps.zoom.min, zoomRef.current));
           if (wanted !== hardwareZoomRef.current) {
             hardwareZoomRef.current = wanted;
             void track.applyConstraints({ advanced: [{ zoom: wanted } as MediaTrackConstraintSet] }).catch(() => {
               hardwareZoomRef.current = null;
             });
           }
+          if (!followRef.current) {
+            const factor = wanted / Math.max(caps.zoom.min, 0.01);
+            zoom = zoomRef.current / Math.max(factor, 1);
+          }
         }
-        const crop = optical ? FULL : applyZoom(base, zoomRef.current);
+        const center =
+          followRef.current && base.w < 0.98
+            ? { x: base.x + base.w / 2, y: base.y + base.h / 2 }
+            : undefined;
+        const crop = frameAtZoom(zoom, center);
         cropRef.current = crop;
         placeVideo(video, finder, crop, facingRef.current === "user");
-        const nextMag = optical ? zoomRef.current : 1 / crop.w;
+        const nextMag = zoomRef.current;
         const isLocked = followRef.current && crop.w < 0.94;
         if (Math.abs(nextMag - shown) > 0.04) {
           shown = nextMag;
@@ -358,7 +366,9 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     const move = (event: TouchEvent) => {
       if (event.touches.length !== 2 || !pinchRef.current) return;
       event.preventDefault();
-      zoomRef.current = clampZoom(pinchRef.current.zoom * (distance(event.touches) / pinchRef.current.dist), followRef.current);
+      const nextZoom = clampZoom(pinchRef.current.zoom * (distance(event.touches) / pinchRef.current.dist));
+      zoomRef.current = nextZoom;
+      setMag(nextZoom);
     };
     const end = () => {
       pinchRef.current = null;
@@ -374,10 +384,6 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
       finder.removeEventListener("touchcancel", end);
     };
   }, [ready, wide]);
-
-  function nudgeZoom(factor: number) {
-    zoomRef.current = clampZoom(zoomRef.current * factor, followRef.current);
-  }
 
   function toggleFollow() {
     const next = !followRef.current;
@@ -466,13 +472,20 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
           {ready && locked ? <span className="lock-mark" /> : null}
           {ready ? (
             <div className="zoom-bar">
-              <button type="button" aria-label="Dézoomer" onClick={() => nudgeZoom(1 / 1.2)}>
-                −
-              </button>
-              <span>{mag.toFixed(1)}×</span>
-              <button type="button" aria-label="Zoomer" onClick={() => nudgeZoom(1.2)}>
-                +
-              </button>
+              <input
+                type="range"
+                min={1}
+                max={10}
+                step={0.1}
+                value={mag}
+                aria-label="Zoom, de ×1 à ×10"
+                onChange={(event) => {
+                  const nextZoom = clampZoom(Number(event.target.value));
+                  zoomRef.current = nextZoom;
+                  setMag(nextZoom);
+                }}
+              />
+              <span>×{mag.toFixed(1)}</span>
               <button type="button" className={follow ? "on" : ""} aria-pressed={follow} onClick={toggleFollow}>
                 Suivi
               </button>
@@ -599,7 +612,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
             </div>
             <p className="hint">
               {ready
-                ? "Pince l’image pour zoomer. Suivi garde le tableau entier si le téléphone bouge un peu."
+                ? "Curseur de ×1 à ×10, ou pince l’image. Suivi garde le tableau au centre."
                 : "Garde cette page ouverte. Le même compte doit être connecté sur l’ordinateur."}
             </p>
           </>

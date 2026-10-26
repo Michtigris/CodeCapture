@@ -382,7 +382,22 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
   z-index: 3;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: auto;
+}
+.zoom-bar input[type="range"] {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  height: 32px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  accent-color: var(--lime);
+  touch-action: pan-x;
 }
 .zoom-bar button {
   min-width: 40px;
@@ -391,13 +406,18 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
   background: rgba(8, 9, 8, 0.72);
   color: #f3f5ef;
   border: 1px solid rgba(243, 245, 239, 0.28);
+  user-select: none;
+  -webkit-user-select: none;
 }
 .zoom-bar button.on { background: var(--lime); color: var(--ink); border-color: transparent; }
 .zoom-bar span {
-  min-width: 3.2em;
+  min-width: 3.4em;
   color: #f3f5ef;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .phone-stage {
   height: 240px;

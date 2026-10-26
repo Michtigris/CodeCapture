@@ -2,11 +2,27 @@ export type NormRect = { x: number; y: number; w: number; h: number };
 
 export const FULL: NormRect = { x: 0, y: 0, w: 1, h: 1 };
 
-const MIN_ZOOM = 0.55;
-const MAX_ZOOM = 2.4;
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 10;
 
-export function clampZoom(zoom: number, follow: boolean): number {
-  return Math.min(MAX_ZOOM, Math.max(follow ? MIN_ZOOM : 1, zoom));
+export function clampZoom(zoom: number): number {
+  if (!Number.isFinite(zoom)) return MIN_ZOOM;
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
+}
+
+export function frameAtZoom(zoom: number, center?: { x: number; y: number }): NormRect {
+  const z = clampZoom(zoom);
+  const w = 1 / z;
+  const h = 1 / z;
+  const cx = center?.x ?? 0.5;
+  const cy = center?.y ?? 0.5;
+  let x = cx - w / 2;
+  let y = cy - h / 2;
+  if (x < 0) x = 0;
+  if (y < 0) y = 0;
+  if (x + w > 1) x = 1 - w;
+  if (y + h > 1) y = 1 - h;
+  return { x, y, w, h };
 }
 
 export function detectTarget(image: { width: number; height: number; data: Uint8ClampedArray }): NormRect | null {
@@ -149,21 +165,6 @@ export function smoothLock(prev: NormRect | null, next: NormRect | null): NormRe
   x2 += (tx2 - x2) * t;
   y2 += (ty2 - y2) * t;
   return clampRect({ x: x1, y: y1, w: x2 - x1, h: y2 - y1 });
-}
-
-export function applyZoom(frame: NormRect, zoom: number): NormRect {
-  const z = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
-  const cx = frame.x + frame.w / 2;
-  const cy = frame.y + frame.h / 2;
-  const w = Math.min(1, Math.max(0.28, frame.w / z));
-  const h = Math.min(1, Math.max(0.28, frame.h / z));
-  let x = cx - w / 2;
-  let y = cy - h / 2;
-  if (x < 0) x = 0;
-  if (y < 0) y = 0;
-  if (x + w > 1) x = 1 - w;
-  if (y + h > 1) y = 1 - h;
-  return { x, y, w, h };
 }
 
 export function placeVideo(video: HTMLVideoElement, finder: HTMLElement, crop: NormRect, mirror: boolean) {
