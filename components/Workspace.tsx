@@ -615,10 +615,6 @@ export function Workspace({ groupId }: { groupId: string }) {
       <div className="grid">
         <div className="side">
         <section className="pane pane-photos">
-          <div className="pane-head">
-            <h2>Lot en cours</h2>
-            <span className="muted">{pending} photo{pending > 1 ? "s" : ""}</span>
-          </div>
           {(() => {
             const shots = data.photos.filter((photo) => !photo.captureId);
             const copied = new Set(data.group.copiedIds ?? []);

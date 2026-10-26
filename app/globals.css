@@ -629,7 +629,7 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
   background: #070806;
 }
 .lot-card img { width: 100%; height: 240px; object-fit: contain; display: block; }
-.lot-one { margin: 0 12px 12px; }
+.lot-one { margin: 12px; }
 .lot-frame {
   height: 240px;
   background: #070806;
