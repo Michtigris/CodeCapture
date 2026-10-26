@@ -4,18 +4,26 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { GroupSummary, PublicUser } from "@/lib/types";
 import { formatWhen } from "./format";
-import { Toast, useToast } from "./toast";
 import { TopBar } from "./TopBar";
-import { copyText } from "./copy";
 
-type Network = { origin: string; lan: string[]; hosted?: boolean };
+const TICKER =
+  "CodeCapture photographie un écran, une feuille ou un tableau avec le téléphone ou la caméra du PC, puis reconstitue les fichiers sur l’ordinateur.";
+
+function Ticker() {
+  return (
+    <footer className="ticker" aria-label={TICKER}>
+      <div className="ticker-track" aria-hidden="true">
+        <span>{TICKER}</span>
+        <span>{TICKER}</span>
+      </div>
+    </footer>
+  );
+}
 
 export function GroupsScreen() {
   const router = useRouter();
-  const { msg, toast } = useToast();
   const [me, setMe] = useState<PublicUser | null>(null);
   const [groups, setGroups] = useState<GroupSummary[] | null>(null);
-  const [network, setNetwork] = useState<Network | null>(null);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [joining, setJoining] = useState(false);
@@ -32,14 +40,10 @@ export function GroupsScreen() {
         return;
       }
       const meData = await meRes.json();
-      const [groupsRes, netRes] = await Promise.all([
-        fetch("/api/groups", { cache: "no-store" }),
-        fetch("/api/network", { cache: "no-store" }),
-      ]);
+      const groupsRes = await fetch("/api/groups", { cache: "no-store" });
       if (stop) return;
       setMe(meData.user);
       if (groupsRes.ok) setGroups((await groupsRes.json()).groups);
-      if (netRes.ok) setNetwork(await netRes.json());
     })().catch(() => {
       if (!stop) setError("Chargement impossible.");
     });
@@ -95,12 +99,11 @@ export function GroupsScreen() {
     router.push(group.code ? `/${group.code}` : `/groupe/${group.id}`);
   }
 
-  const links = network ? [network.origin, ...network.lan.filter((url) => url !== network.origin)] : [];
-
   if (!me || !groups) {
     return (
       <main className="page">
         <p className="boot wrap">{error || "Chargement…"}</p>
+        <Ticker />
       </main>
     );
   }
@@ -226,32 +229,8 @@ export function GroupsScreen() {
             ) : null}
           </>
         )}
-        <section className="link-card">
-          <p className="kicker">Relier le téléphone</p>
-          <p className="muted">
-            {network?.hosted
-              ? `Ouvre cette adresse sur le téléphone et connecte-toi avec ${me.email}. Le site est en https, la caméra automatique peut démarrer.`
-              : `Ouvre CodeCapture sur le téléphone et connecte-toi avec ${me.email}. Si le site tourne sur cet ordinateur, utilise l’adresse IP du réseau, pas localhost. Autorise Node dans le pare-feu Windows si la page ne s’ouvre pas.`}
-          </p>
-          <div className="link-list">
-            {links.map((url) => (
-              <div className="link-row" key={url}>
-                <code>{url}</code>
-                <button
-                  type="button"
-                  className="ghost"
-                  onClick={() => {
-                    void copyText(url).then(() => toast("Lien copié"));
-                  }}
-                >
-                  Copier
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
       </div>
-      <Toast msg={msg} />
+      <Ticker />
     </main>
   );
 }

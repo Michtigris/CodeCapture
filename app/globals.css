@@ -856,6 +856,38 @@ pre.code {
   .side { display: contents; }
 }
 
+.page:has(.ticker) { padding-bottom: 25px; }
+.ticker {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  height: 25px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  background: var(--bg-3);
+  border-top: 1px solid var(--line);
+}
+.ticker-track {
+  display: flex;
+  width: max-content;
+  animation: ticker 42s linear infinite;
+}
+.ticker-track span {
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--muted);
+  padding-right: 72px;
+}
+@keyframes ticker {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tally::before { animation: none; }
+  .ticker-track { animation: none; }
 }
