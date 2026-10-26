@@ -64,6 +64,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   const streamDeviceRef = useRef("");
   const armDesk = useRef("");
   const selectedIdRef = useRef("");
+  const wideRef = useRef(false);
   const readyRef = useRef(false);
   const runningRef = useRef(false);
   const facingRef = useRef(facing);
@@ -77,6 +78,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   enableRef.current = enableCamera;
   followRef.current = follow;
   selectedIdRef.current = selectedId;
+  wideRef.current = wide;
 
   useEffect(() => {
     setSecure(window.isSecureContext);
@@ -288,6 +290,8 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
       setMag(1);
       setViewMag(1);
       setLocked(false);
+      followRef.current = false;
+      setFollow(false);
       setReady(true);
       const saved = [{ id: mediaId, label }];
       writePcCameras(saved);
@@ -427,11 +431,24 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
           lock = null;
           misses = 0;
         }
-        const aimed = followRef.current && base.w < 0.98 && base.h < 0.98;
-        const crop = aimed ? frameOnTarget(base, zoomRef.current) : frameAtZoom(zoomRef.current);
+        const desk = wideRef.current;
+        const zoom = zoomRef.current;
+        const aimed = !desk && followRef.current && base.w < 0.98 && base.h < 0.98;
+        const crop = aimed ? frameOnTarget(base, zoom) : frameAtZoom(zoom);
         cropRef.current = crop;
-        placeVideo(video, finder, crop, facingRef.current === "user");
-        const effective = 1 / crop.w;
+        if (desk) {
+          video.style.width = "100%";
+          video.style.height = "100%";
+          video.style.left = "0";
+          video.style.top = "0";
+          video.style.right = "0";
+          video.style.bottom = "0";
+          video.style.objectFit = "contain";
+          video.style.transform = zoom > 1.01 ? `scale(${zoom})` : "none";
+        } else {
+          placeVideo(video, finder, crop, facingRef.current === "user");
+        }
+        const effective = desk ? zoom : 1 / crop.w;
         if (Math.abs(effective - shown) > 0.04) {
           shown = effective;
           setViewMag(effective);
@@ -545,8 +562,6 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   }
 
   async function startDesk() {
-    followRef.current = true;
-    setFollow(true);
     setOwnInterval(60);
     onIntervalChange(60);
     greetedRef.current = true;
@@ -572,6 +587,14 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
       return;
     }
     setSelectedId(id);
+  }
+
+  function stopDesk() {
+    disableCamera();
+    setPcCameras([]);
+    writePcCameras([]);
+    setSelectedId("");
+    writeCameraChoice("");
   }
 
   function forgetPc(id: string) {
@@ -607,16 +630,14 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   const deskId = selectedId.startsWith("pc:") ? selectedId.slice(3) : "";
   const usingDesk = deskId.length > 0;
   const phoneKey = linked.map((camera) => camera.deviceId).join("|");
-  const pcKey = pcCameras.map((camera) => camera.id).join("|");
 
   useEffect(() => {
     if (!wide || !storedReady) return;
-    const pcIds = pcKey ? pcKey.split("|").map((id) => `pc:${id}`) : [];
     const phoneIds = phoneKey ? phoneKey.split("|") : [];
     if (selectedId.startsWith("pc:") || phoneIds.includes(selectedId)) return;
-    const next = pcIds[0] || phoneIds[0] || "";
+    const next = phoneIds[0] || "";
     if (next !== selectedId) setSelectedId(next);
-  }, [wide, storedReady, pcKey, phoneKey, selectedId]);
+  }, [wide, storedReady, phoneKey, selectedId]);
 
   useEffect(() => {
     if (!storedReady || !selectedId) return;
@@ -649,28 +670,32 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
       </div>
       {layoutReady && wide ? (
         <div className="phone-stage sources">
-          <button type="button" className="pc-add" onClick={() => chooseSource("pc:chrome")}>
-            Caméra de ce PC
-          </button>
+          {usingDesk ? null : (
+            <button type="button" className="pc-add" onClick={() => chooseSource("pc:chrome")}>
+              Caméra de ce PC
+            </button>
+          )}
           {pcCameras.length === 0 && linked.length === 0 ? (
             <p className="phone-empty">Connecte un téléphone, ou utilise la caméra de ce PC.</p>
           ) : (
             <ul>
-              {pcCameras.map((camera) => (
-                <li key={camera.id} className="source-row">
-                  <button
-                    type="button"
-                    className={selectedId === `pc:${camera.id}` ? "on" : ""}
-                    onClick={() => chooseSource(`pc:${camera.id}`)}
-                  >
-                    <span>{camera.label}</span>
-                    <span>{ready && deskId === camera.id ? (running ? "Série en cours" : "Caméra allumée") : "Ce PC"}</span>
-                  </button>
-                  <button type="button" className="source-drop" onClick={() => forgetPc(camera.id)}>
-                    Retirer
-                  </button>
-                </li>
-              ))}
+              {usingDesk
+                ? null
+                : pcCameras.map((camera) => (
+                    <li key={camera.id} className="source-row">
+                      <button
+                        type="button"
+                        className={selectedId === `pc:${camera.id}` ? "on" : ""}
+                        onClick={() => chooseSource(`pc:${camera.id}`)}
+                      >
+                        <span>{camera.label}</span>
+                        <span>Ce PC</span>
+                      </button>
+                      <button type="button" className="source-drop" onClick={() => forgetPc(camera.id)}>
+                        Retirer
+                      </button>
+                    </li>
+                  ))}
               {linked.map((camera) => (
                 <li key={camera.deviceId}>
                   <button
@@ -699,6 +724,11 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
               transform: !wide && facing === "user" ? "scaleX(-1)" : undefined,
             }}
           />
+          {wide ? (
+            <button type="button" className="desk-close" aria-label="Ne plus utiliser la caméra de ce PC" onClick={stopDesk}>
+              ×
+            </button>
+          ) : null}
           {ready && locked ? <span className="lock-mark" /> : null}
           {ready ? (
             <div className="zoom-bar">
@@ -717,9 +747,11 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
                 }}
               />
               <span>×{viewMag.toFixed(1)}</span>
-              <button type="button" className={follow ? "on" : ""} aria-pressed={follow} onClick={toggleFollow}>
-                Suivi
-              </button>
+              {wide ? null : (
+                <button type="button" className={follow ? "on" : ""} aria-pressed={follow} onClick={toggleFollow}>
+                  Suivi
+                </button>
+              )}
             </div>
           ) : null}
           {!ready ? (
