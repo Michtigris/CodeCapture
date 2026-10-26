@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { INTERVALS } from "@/lib/constants";
 import type { CameraDTO } from "@/lib/types";
-import { deviceId } from "./device";
+import { deviceId, readCameraChoice, readPcCameras, writeCameraChoice, writePcCameras, type PcCamera } from "./device";
 import { formatRemain } from "./format";
 import { fileToJpeg, frameFromVideo } from "./images";
 import { clampZoom, detectTarget, frameAtZoom, frameOnTarget, FULL, placeVideo, smoothLock, type NormRect } from "./targetLock";
@@ -58,7 +58,14 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   const [mag, setMag] = useState(1);
   const [viewMag, setViewMag] = useState(1);
   const [pending, setPending] = useState<{ action: string; id: number } | null>(null);
+  const [pcCameras, setPcCameras] = useState<PcCamera[]>([]);
+  const [choices, setChoices] = useState<PcCamera[]>([]);
+  const [picking, setPicking] = useState(false);
+  const [storedReady, setStoredReady] = useState(false);
   const ackRef = useRef(0);
+  const streamDeviceRef = useRef("");
+  const armDesk = useRef("");
+  const selectedIdRef = useRef("");
   const readyRef = useRef(false);
   const runningRef = useRef(false);
   const facingRef = useRef(facing);
@@ -71,10 +78,15 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   facingRef.current = facing;
   enableRef.current = enableCamera;
   followRef.current = follow;
+  selectedIdRef.current = selectedId;
 
   useEffect(() => {
     setSecure(window.isSecureContext);
     setSelfId(deviceId());
+    setPcCameras(readPcCameras());
+    const saved = readCameraChoice();
+    if (saved) setSelectedId(saved);
+    setStoredReady(true);
     const desktop = window.matchMedia("(min-width: 901px)");
     const handheld = window.matchMedia("(pointer: coarse) and (max-device-width: 1100px)");
     const apply = () => setWide(desktop.matches && !handheld.matches);
@@ -90,13 +102,14 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   }, []);
 
   useEffect(() => {
-    if (!wide) return;
+    if (!wide || selectedId.startsWith("pc:")) return;
     setRunning(false);
     setReady(false);
+    streamDeviceRef.current = "";
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
-  }, [wide]);
+  }, [wide, selectedId]);
 
   useEffect(() => {
     const onVis = () => setHidden(document.hidden);
@@ -238,6 +251,51 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     }
   }
 
+  async function openDesk(mediaId: string) {
+    setCameraError("");
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError("Ce navigateur ne donne pas accès à la caméra.");
+      return;
+    }
+    if (streamDeviceRef.current === mediaId && streamRef.current && videoRef.current?.srcObject) {
+      setReady(true);
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { deviceId: { exact: mediaId }, width: { ideal: 1920 }, height: { ideal: 1440 } },
+      });
+      if (selectedIdRef.current !== `pc:${mediaId}`) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = stream;
+      streamDeviceRef.current = mediaId;
+      const video = videoRef.current;
+      if (!video) return;
+      video.srcObject = stream;
+      await video.play();
+      const track = stream.getVideoTracks()[0];
+      const range = track ? zoomRangeOf(track) : null;
+      zoomRangeRef.current = range;
+      nativeBrokenRef.current = !range;
+      if (track) await focusTrack(track).catch(() => undefined);
+      zoomRef.current = 1;
+      hardwareZoomRef.current = null;
+      cropRef.current = FULL;
+      setMag(1);
+      setViewMag(1);
+      setLocked(false);
+      setReady(true);
+    } catch (error) {
+      streamDeviceRef.current = "";
+      setReady(false);
+      setCameraError(explainCamera(error));
+    }
+  }
+
   useEffect(() => {
     setOwnInterval(intervalSec);
   }, [intervalSec]);
@@ -324,7 +382,16 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   }, [groupId, ownInterval, ownerName]);
 
   useEffect(() => {
-    if (!ready || wide) return;
+    if (!wide) return;
+    if (!selectedId.startsWith("pc:")) return;
+    const wanted = armDesk.current;
+    if (!wanted || `pc:${wanted}` !== selectedId) return;
+    armDesk.current = "";
+    void openDesk(wanted);
+  }, [wide, selectedId]);
+
+  useEffect(() => {
+    if (!ready) return;
     const video = videoRef.current;
     const finder = finderRef.current;
     if (!video || !finder) return;
@@ -375,11 +442,11 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     return () => {
       stopped = true;
     };
-  }, [ready, wide]);
+  }, [ready]);
 
   useEffect(() => {
     const finder = finderRef.current;
-    if (!finder || !ready || wide) return;
+    if (!finder || !ready) return;
     const distance = (touches: TouchList) => {
       const dx = touches[0].clientX - touches[1].clientX;
       const dy = touches[0].clientY - touches[1].clientY;
@@ -409,7 +476,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
       finder.removeEventListener("touchend", end);
       finder.removeEventListener("touchcancel", end);
     };
-  }, [ready, wide]);
+  }, [ready]);
 
   function pushNativeZoom() {
     const track = streamRef.current?.getVideoTracks()[0];
@@ -441,6 +508,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     zoomRangeRef.current = null;
     nativeBrokenRef.current = false;
     cropRef.current = FULL;
+    streamDeviceRef.current = "";
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
@@ -474,6 +542,83 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     }
   }
 
+  async function startDesk(mediaId: string) {
+    followRef.current = true;
+    setFollow(true);
+    setOwnInterval(60);
+    onIntervalChange(60);
+    greetedRef.current = true;
+    await openDesk(mediaId);
+    if (!streamRef.current) return;
+    setRunning(true);
+    try {
+      await shoot();
+    } catch (error) {
+      onToast(error instanceof Error ? error.message : "Photo impossible.");
+    }
+  }
+
+  function chooseSource(id: string) {
+    setSelectedId(id);
+    if (!id.startsWith("pc:")) return;
+    armDesk.current = id.slice(3);
+    if (selectedId === id) {
+      armDesk.current = "";
+      void openDesk(id.slice(3));
+    }
+  }
+
+  function rememberPc(camera: PcCamera) {
+    setPcCameras((current) => {
+      const next = current.some((item) => item.id === camera.id)
+        ? current.map((item) => (item.id === camera.id ? camera : item))
+        : [...current, camera];
+      writePcCameras(next);
+      return next;
+    });
+    setPicking(false);
+    chooseSource(`pc:${camera.id}`);
+  }
+
+  function forgetPc(id: string) {
+    setPcCameras((current) => {
+      const next = current.filter((item) => item.id !== id);
+      writePcCameras(next);
+      return next;
+    });
+    if (selectedId === `pc:${id}`) {
+      disableCamera();
+      setSelectedId("");
+      writeCameraChoice("");
+    }
+  }
+
+  async function beginPick() {
+    setCameraError("");
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError("Ce navigateur ne donne pas accès à la caméra.");
+      return;
+    }
+    setPicking(true);
+    let probe: MediaStream | null = null;
+    try {
+      if (!streamRef.current) {
+        probe = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+      }
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const found = devices
+        .filter((item) => item.kind === "videoinput" && item.deviceId)
+        .map((item, index) => ({ id: item.deviceId, label: item.label.trim().slice(0, 80) || `Caméra ${index + 1}` }));
+      setChoices(found);
+      if (!found.length) setCameraError("Aucune caméra détectée sur ce PC.");
+    } catch (error) {
+      setPicking(false);
+      setCameraError(explainCamera(error));
+    } finally {
+      probe?.getTracks().forEach((track) => track.stop());
+    }
+  }
+
   async function importFiles(list: FileList | null) {
     const files = [...(list ?? [])];
     if (!files.length) return;
@@ -491,12 +636,24 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   const linked = cameras.filter((camera) => camera.phone && camera.deviceId !== selfId);
   const selected = linked.find((camera) => camera.deviceId === selectedId) ?? null;
   const aimed = selected?.running === true;
+  const deskId = selectedId.startsWith("pc:") ? selectedId.slice(3) : "";
+  const usingDesk = deskId.length > 0;
+  const phoneKey = linked.map((camera) => camera.deviceId).join("|");
+  const pcKey = pcCameras.map((camera) => camera.id).join("|");
 
   useEffect(() => {
-    if (!wide) return;
-    const next = linked.some((camera) => camera.deviceId === selectedId) ? selectedId : (linked[0]?.deviceId ?? "");
+    if (!wide || !storedReady) return;
+    const pcIds = pcKey ? pcKey.split("|").map((id) => `pc:${id}`) : [];
+    const phoneIds = phoneKey ? phoneKey.split("|") : [];
+    if (pcIds.includes(selectedId) || phoneIds.includes(selectedId)) return;
+    const next = pcIds[0] || phoneIds[0] || "";
     if (next !== selectedId) setSelectedId(next);
-  }, [wide, linked, selectedId]);
+  }, [wide, storedReady, pcKey, phoneKey, selectedId]);
+
+  useEffect(() => {
+    if (!storedReady || !selectedId) return;
+    writeCameraChoice(selectedId);
+  }, [storedReady, selectedId]);
 
   async function sendCommand(command: "start" | "stop" | "shoot" | "interval", seconds?: number) {
     if (!selected) {
@@ -522,8 +679,60 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
         <h2>Caméra</h2>
         {running || aimed ? <span className="tally">Série en cours</span> : null}
       </div>
-      {layoutReady && !wide ? (
-        <div ref={finderRef} className={ready ? "viewfinder filming" : "viewfinder"}>
+      {layoutReady && wide ? (
+        <div className="phone-stage sources">
+          <button type="button" className="pc-add" onClick={() => void beginPick()}>
+            Inscrire une caméra de ce PC
+          </button>
+          {picking ? (
+            <ul>
+              {choices.map((camera) => (
+                <li key={camera.id}>
+                  <button type="button" onClick={() => rememberPc(camera)}>
+                    <span>{camera.label}</span>
+                    <span>Choisir</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {pcCameras.length === 0 && linked.length === 0 && !picking ? (
+            <p className="phone-empty">Inscris la caméra au-dessus du PC, ou connecte un téléphone.</p>
+          ) : (
+            <ul>
+              {pcCameras.map((camera) => (
+                <li key={camera.id} className="source-row">
+                  <button
+                    type="button"
+                    className={selectedId === `pc:${camera.id}` ? "on" : ""}
+                    onClick={() => chooseSource(`pc:${camera.id}`)}
+                  >
+                    <span>{camera.label}</span>
+                    <span>{ready && deskId === camera.id ? (running ? "Série en cours" : "Caméra allumée") : "Ce PC"}</span>
+                  </button>
+                  <button type="button" className="source-drop" onClick={() => forgetPc(camera.id)}>
+                    Retirer
+                  </button>
+                </li>
+              ))}
+              {linked.map((camera) => (
+                <li key={camera.deviceId}>
+                  <button
+                    type="button"
+                    className={camera.deviceId === selectedId ? "on" : ""}
+                    onClick={() => chooseSource(camera.deviceId)}
+                  >
+                    <span>{camera.label}</span>
+                    <span>{camera.camera ? "Caméra allumée" : "Connecté"}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+      {layoutReady && (!wide || usingDesk) ? (
+        <div ref={finderRef} className={`viewfinder${wide ? " desk" : ""}${ready ? " filming" : ""}`}>
           <video
             ref={videoRef}
             autoPlay
@@ -531,7 +740,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
             playsInline
             style={{
               opacity: ready ? 1 : 0,
-              transform: facing === "user" ? "scaleX(-1)" : undefined,
+              transform: !wide && facing === "user" ? "scaleX(-1)" : undefined,
             }}
           />
           {ready && locked ? <span className="lock-mark" /> : null}
@@ -559,46 +768,31 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
           ) : null}
           {!ready ? (
             <div className="viewfinder-empty">
-              <p>Place le téléphone devant l’écran, le tableau ou la feuille.</p>
-              <button type="button" className="lime" onClick={() => void activate()}>
-                Activer la caméra
-              </button>
+              {wide ? (
+                <p>Démarre le cycle. Les fichiers restent sur cet écran.</p>
+              ) : (
+                <>
+                  <p>Place le téléphone devant l’écran, le tableau ou la feuille.</p>
+                  <button type="button" className="lime" onClick={() => void activate()}>
+                    Activer la caméra
+                  </button>
+                </>
+              )}
             </div>
           ) : null}
           <div className={flash ? "flash on" : "flash"} />
         </div>
-      ) : (
-        <div className="phone-stage">
-          {linked.length === 0 ? (
-            <p className="phone-empty">Aucun téléphone</p>
-          ) : (
-            <ul>
-              {linked.map((camera) => (
-                <li key={camera.deviceId}>
-                  <button
-                    type="button"
-                    className={camera.deviceId === selectedId ? "on" : ""}
-                    onClick={() => setSelectedId(camera.deviceId)}
-                  >
-                    <span>{camera.label}</span>
-                    <span>{camera.camera ? "Caméra allumée" : "Connecté"}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+      ) : null}
       <div className="cam-controls">
         <label className="field">
-          <span>{wide ? "Une photo toutes les, pour le téléphone choisi" : "Une photo toutes les"}</span>
+          <span>{wide && !usingDesk ? "Une photo toutes les, pour le téléphone choisi" : "Une photo toutes les"}</span>
           <select
             className={pending?.action === "interval" ? "armed" : ""}
-            value={String(wide ? selected?.intervalSec || intervalSec : ownInterval)}
-            disabled={wide && !selected}
+            value={String(wide && !usingDesk ? selected?.intervalSec || intervalSec : ownInterval)}
+            disabled={wide && !usingDesk && !selected}
             onChange={(event) => {
               const seconds = Number(event.target.value);
-              if (wide) void sendCommand("interval", seconds);
+              if (wide && !usingDesk) void sendCommand("interval", seconds);
               else {
                 setOwnInterval(seconds);
                 onIntervalChange(seconds);
@@ -612,7 +806,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
             ))}
           </select>
         </label>
-        {!wide && running ? (
+        {(!wide || usingDesk) && running ? (
           <p className="remain">
             {hidden ? "Série en pause — reviens sur cet onglet" : `Prochaine photo dans ${remain}`}
           </p>
@@ -623,7 +817,17 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
             <TipButton label="QR" className="icon-btn lime" onClick={onShowQr}>
               <Glyph name="qr" />
             </TipButton>
-            {pending?.action === "stop" || (pending?.action !== "start" && aimed) ? (
+            {usingDesk ? (
+              running ? (
+                <TipButton label="Arrêter le cycle" className="icon-btn" onClick={() => setRunning(false)}>
+                  <Glyph name="stop" />
+                </TipButton>
+              ) : (
+                <TipButton label="Démarrer le cycle" className="icon-btn lime" disabled={!deskId} onClick={() => void startDesk(deskId)}>
+                  <Glyph name="play" />
+                </TipButton>
+              )
+            ) : pending?.action === "stop" || (pending?.action !== "start" && aimed) ? (
               <TipButton
                 label="Arrêter"
                 className={pending?.action === "stop" ? "icon-btn armed" : "icon-btn"}
@@ -643,15 +847,28 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
                 <Glyph name="play" />
               </TipButton>
             )}
-            <TipButton
-              label="Photo"
-              className={pending?.action === "shoot" ? "icon-btn armed" : "icon-btn"}
-              pressed={pending?.action === "shoot"}
-              disabled={!selected}
-              onClick={() => void sendCommand("shoot")}
-            >
-              <Glyph name="shutter" />
-            </TipButton>
+            {usingDesk ? (
+              <TipButton
+                label="Photo"
+                className="icon-btn"
+                disabled={!ready}
+                onClick={() => {
+                  void shoot().catch((error) => onToast(error instanceof Error ? error.message : "Photo impossible."));
+                }}
+              >
+                <Glyph name="shutter" />
+              </TipButton>
+            ) : (
+              <TipButton
+                label="Photo"
+                className={pending?.action === "shoot" ? "icon-btn armed" : "icon-btn"}
+                pressed={pending?.action === "shoot"}
+                disabled={!selected}
+                onClick={() => void sendCommand("shoot")}
+              >
+                <Glyph name="shutter" />
+              </TipButton>
+            )}
             <TipButton label="Importer" className="icon-btn" onClick={() => fileRef.current?.click()}>
               <Glyph name="import" />
             </TipButton>
