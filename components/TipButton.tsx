@@ -37,7 +37,7 @@ export function TipButton({ label, className, disabled, pressed, onClick, childr
       ref={hostRef}
       className="tip"
       onMouseEnter={() => {
-        timer.current = window.setTimeout(() => setOpen(true), 1000);
+        timer.current = window.setTimeout(() => setOpen(true), 200);
       }}
       onMouseLeave={() => {
         window.clearTimeout(timer.current);

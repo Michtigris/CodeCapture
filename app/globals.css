@@ -273,7 +273,7 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
 .groupbar {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-start;
+  justify-content: space-between;
   align-items: center;
   gap: 5px 12px;
   padding: 5px;
@@ -281,11 +281,18 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
 }
 .group-stats { margin: 0; font-size: 13px; color: var(--muted); }
 .group-actions > button,
+.group-actions .tip > button,
 .insert-pair > button {
   padding: 8px 10px;
   font-size: 13px;
   line-height: 1.15;
 }
+.prompt-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.prompt-copy svg { display: block; }
 .insert-pair { display: inline-flex; align-items: center; gap: 6px; }
 .insert-dot {
   width: 14px;
@@ -334,7 +341,7 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
 .join-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .archived { margin: 18px 0; }
 .archived summary { cursor: pointer; font-weight: 650; }
-.group-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.group-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; margin-left: auto; }
 .group-actions .hint { flex-basis: 100%; margin: 0; font-size: 12px; }
 .reply-box { width: min(100%, 360px); display: grid; gap: 8px; justify-items: stretch; }
 .reply-box textarea { min-height: 90px; }
@@ -579,6 +586,10 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
   font-size: 12px;
   white-space: nowrap;
   pointer-events: none;
+}
+.group-actions .tip [role="tooltip"] {
+  top: calc(100% + 8px);
+  bottom: auto;
 }
 .live-view {
   width: min(1100px, 92vw);
@@ -863,7 +874,7 @@ pre.code {
   .landing { grid-template-columns: 1fr; padding-top: 16px; }
   .auth-card { order: -1; }
   .group-head, .groupbar, .creator, .link-row { flex-direction: column; align-items: stretch; }
-  .group-actions { justify-items: stretch; min-width: 0; }
+  .group-actions { justify-items: stretch; justify-content: flex-start; min-width: 0; margin-left: 0; }
   .workspace { height: auto; min-height: 100dvh; overflow: visible; }
   .switch {
     display: grid;

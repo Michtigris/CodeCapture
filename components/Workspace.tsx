@@ -2,16 +2,17 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MAX_PHOTOS_PER_SEND } from "@/lib/constants";
+import { CHAT_PROMPT, DEFAULT_BRIEF, MAX_PHOTOS_PER_SEND } from "@/lib/constants";
 import { INSERT_DAY_MS, parseInsert } from "@/lib/insert";
 import type { GroupPayload, PublicUser } from "@/lib/types";
 import { CameraPane } from "./CameraPane";
-import { copyPhotoSet } from "./copy";
+import { copyPhotoSet, copyText } from "./copy";
 import { deviceId } from "./device";
 import { FileStage } from "./FileStage";
 import { QrMark } from "./QrMark";
 import { formatWhen } from "./format";
 import { Toast, useToast } from "./toast";
+import { TipButton } from "./TipButton";
 import { TopBar } from "./TopBar";
 
 function pasteKey(groupId: string) {
@@ -479,6 +480,17 @@ export function Workspace({ groupId }: { groupId: string }) {
     await reload();
   }
 
+  async function copyPrompt() {
+    const extra =
+      brief.trim() && brief.trim() !== DEFAULT_BRIEF.trim() ? `\n\nConsignes du groupe :\n${brief.trim()}` : "";
+    try {
+      await copyText(CHAT_PROMPT + extra);
+      toast("Prompt copié");
+    } catch {
+      toast("Copie impossible.");
+    }
+  }
+
   let label = "Envoyer à ChatGPT";
   if (sending) label = "Lecture des photos…";
   else if (needsKey) label = "Ajouter la clé OpenAI";
@@ -510,11 +522,6 @@ export function Workspace({ groupId }: { groupId: string }) {
             />
             {data.group.code ? <span className="group-code">{data.group.code}</span> : null}
           </div>
-          <p className="group-stats">
-            {pending} dans le lot
-            {data.photos.length - pending > 0 ? ` · ${data.photos.length - pending} en historique` : ""}
-            {data.captures[0] ? ` · dernière extraction ${formatWhen(data.captures[0].createdAt)}` : ""}
-          </p>
         </div>
         <div className="group-actions">
           {needsKey ? null : (
@@ -552,6 +559,19 @@ export function Workspace({ groupId }: { groupId: string }) {
               Inclure les photos déjà envoyées
             </label>
           ) : null}
+          <p className="group-stats">
+            {pending} dans le lot
+            {data.photos.length - pending > 0 ? ` · ${data.photos.length - pending} en historique` : ""}
+            {data.captures[0] ? ` · dernière extraction ${formatWhen(data.captures[0].createdAt)}` : ""}
+          </p>
+          <TipButton label="Copier le prompt à coller avec les photos" className="ghost prompt-copy" onClick={() => void copyPrompt()}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="8" y="3" width="8" height="4" rx="1" />
+              <path d="M8 5H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2" />
+              <path d="M9 12h6M9 16h6" />
+            </svg>
+            Prompt
+          </TipButton>
           <button
             type="button"
             className="lime"
