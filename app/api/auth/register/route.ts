@@ -42,5 +42,5 @@ async function register(request: Request) {
   const token = newToken();
   await createSession(user.id, hashToken(token));
   await setSessionCookie(token);
-  return json({ user: publicUser(user) });
+  return json({ user: publicUser(user), token });
 }

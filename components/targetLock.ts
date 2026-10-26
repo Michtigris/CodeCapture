@@ -10,6 +10,12 @@ export function clampZoom(zoom: number): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
 }
 
+export function frameOnTarget(target: NormRect, userZoom: number): NormRect {
+  const need = Math.max(target.w, target.h, 0.12);
+  const zoom = clampZoom(Math.max(userZoom, 1 / need));
+  return frameAtZoom(zoom, { x: target.x + target.w / 2, y: target.y + target.h / 2 });
+}
+
 export function frameAtZoom(zoom: number, center?: { x: number; y: number }): NormRect {
   const z = clampZoom(zoom);
   const w = 1 / z;

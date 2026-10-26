@@ -36,6 +36,7 @@ export type CameraDTO = {
   running: boolean;
   intervalSec: number;
   label: string;
+  ack?: number;
 };
 
 export type GroupPayload = {

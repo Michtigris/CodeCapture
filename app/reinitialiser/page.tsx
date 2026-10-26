@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { PasswordField } from "@/components/PasswordField";
 import { Mark } from "@/components/Mark";
+import { keepSession } from "@/components/keepSession";
 
 export default function ResetPage() {
   const [password, setPassword] = useState("");
@@ -30,6 +31,7 @@ export default function ResetPage() {
       setError(data.error || "Le mot de passe n'a pas pu être changé.");
       return;
     }
+    if (typeof data.token === "string") keepSession(data.token);
     location.href = "/groupes";
   }
 

@@ -6,11 +6,12 @@ type Props = {
   label: string;
   className?: string;
   disabled?: boolean;
+  pressed?: boolean;
   onClick: () => void;
   children: ReactNode;
 };
 
-export function TipButton({ label, className, disabled, onClick, children }: Props) {
+export function TipButton({ label, className, disabled, pressed, onClick, children }: Props) {
   const [open, setOpen] = useState(false);
   const [left, setLeft] = useState(0);
   const timer = useRef(0);
@@ -43,7 +44,7 @@ export function TipButton({ label, className, disabled, onClick, children }: Pro
         setOpen(false);
       }}
     >
-      <button type="button" className={className} disabled={disabled} aria-label={label} onClick={onClick}>
+      <button type="button" className={className} disabled={disabled} aria-pressed={pressed} aria-label={label} onClick={onClick}>
         {children}
       </button>
       {open ? (

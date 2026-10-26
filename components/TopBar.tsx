@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { dropSession } from "./keepSession";
 import { Mark } from "./Mark";
 
 export function TopBar({ email }: { email?: string }) {
   async function logout() {
+    dropSession();
     await fetch("/api/auth/logout", { method: "POST" });
     location.href = "/";
   }

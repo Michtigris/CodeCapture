@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { safeNext } from "@/lib/origin";
+import { dropSession, keepSession, keptSession } from "./keepSession";
 import { Mark } from "./Mark";
 import { PasswordField } from "./PasswordField";
 
@@ -23,10 +24,32 @@ export function AuthScreen() {
   const [sent, setSent] = useState("");
 
   useEffect(() => {
-    fetch("/api/auth/me")
-      .then((res) => {
-        if (res.ok) location.href = "/groupes";
-        else setReady(true);
+    const enter = () => {
+      const next = new URLSearchParams(window.location.search).get("next");
+      location.href = safeNext(next);
+    };
+    fetch("/api/auth/me", { cache: "no-store" })
+      .then(async (res) => {
+        if (res.ok) {
+          enter();
+          return;
+        }
+        const token = keptSession();
+        if (!token) {
+          setReady(true);
+          return;
+        }
+        const resumed = await fetch("/api/auth/resume", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+          cache: "no-store",
+        });
+        if (resumed.ok) enter();
+        else {
+          dropSession();
+          setReady(true);
+        }
       })
       .catch(() => setReady(true));
   }, []);
@@ -61,6 +84,7 @@ export function AuthScreen() {
         setBusy(false);
         return;
       }
+      if (typeof data.token === "string") keepSession(data.token);
       const next = new URLSearchParams(window.location.search).get("next");
       location.href = safeNext(next);
     } catch {

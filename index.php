@@ -115,6 +115,9 @@ foreach (preg_split("/\r\n|\n|\r/", substr($response, 0, $headerSize)) as $line)
     if (str_starts_with($lower, "location:")) {
         $line = preg_replace("#https?://(127\\.0\\.0\\.1|localhost)(:\\d+)?#i", "https://$publicHost", $line) ?? $line;
     }
+    if (str_starts_with($lower, "set-cookie:")) {
+        $line = preg_replace("/;\s*Expires=[^;]*/i", "", $line) ?? $line;
+    }
     header($line, false);
 }
 echo substr($response, $headerSize);

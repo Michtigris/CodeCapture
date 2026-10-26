@@ -6,7 +6,7 @@ import type { CameraDTO } from "@/lib/types";
 import { deviceId } from "./device";
 import { formatRemain } from "./format";
 import { fileToJpeg, frameFromVideo } from "./images";
-import { clampZoom, detectTarget, frameAtZoom, FULL, placeVideo, smoothLock, type NormRect } from "./targetLock";
+import { clampZoom, detectTarget, frameAtZoom, frameOnTarget, FULL, placeVideo, smoothLock, type NormRect } from "./targetLock";
 import { TipButton } from "./TipButton";
 
 type Props = {
@@ -56,6 +56,9 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   const [follow, setFollow] = useState(true);
   const [locked, setLocked] = useState(false);
   const [mag, setMag] = useState(1);
+  const [viewMag, setViewMag] = useState(1);
+  const [pending, setPending] = useState<{ action: string; id: number } | null>(null);
+  const ackRef = useRef(0);
   const readyRef = useRef(false);
   const runningRef = useRef(false);
   const facingRef = useRef(facing);
@@ -138,6 +141,24 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     const clock = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(clock);
   }, [running]);
+
+  useEffect(() => {
+    if (!pending) return;
+    const phone = cameras.find((camera) => camera.deviceId === selectedId);
+    if (phone?.ack === pending.id) setPending(null);
+  }, [pending, cameras, selectedId]);
+
+  useEffect(() => {
+    if (!pending) return;
+    const timer = window.setTimeout(() => {
+      setPending((current) => {
+        if (current?.id !== pending.id) return current;
+        onToastRef.current("Le téléphone n'a pas répondu.");
+        return null;
+      });
+    }, 20000);
+    return () => window.clearTimeout(timer);
+  }, [pending]);
 
   async function shoot() {
     const video = videoRef.current;
@@ -253,26 +274,41 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
             running: runningRef.current,
             intervalSec: ownInterval,
             givenName: media.matches ? ownerName : "",
+            ack: ackRef.current || undefined,
           }),
         });
         if (!res.ok || stop) return;
         const payload = (await res.json()) as {
-          command?: { action?: string; intervalSec?: number } | null;
+          command?: { id?: number; action?: string; intervalSec?: number } | null;
         };
         const command = payload.command;
         if (!command?.action) return;
+        const commandId = Number(command.id) || 0;
+        const done = () => {
+          if (commandId) ackRef.current = commandId;
+        };
         if (command.action === "interval" && command.intervalSec) setOwnInterval(command.intervalSec);
         if (command.action === "stop") setRunning(false);
-        if (!media.matches) return;
+        if (command.action === "interval" || command.action === "stop" || !media.matches) {
+          done();
+          return;
+        }
         if (command.action === "shoot" || command.action === "start") {
           commandShotRef.current = true;
-          if (command.action === "start") setRunning(true);
+          if (command.action === "start") {
+            followRef.current = true;
+            setFollow(true);
+            setOwnInterval(60);
+            setRunning(true);
+          }
           try {
             if (!readyRef.current) await enableRef.current(facingRef.current);
             await shootRef.current();
           } catch (error) {
             commandShotRef.current = false;
             onToastRef.current(error instanceof Error ? error.message : "Photo impossible.");
+          } finally {
+            done();
           }
         }
       } finally {
@@ -322,24 +358,16 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
           lock = null;
           misses = 0;
         }
-        const range = zoomRangeRef.current;
-        const native = range && !nativeBrokenRef.current ? nativeZoomFor(zoomRef.current, range) : null;
-        if (native != null) pushNativeZoom();
-        const digital = native ? zoomRef.current / Math.max(native, 0.01) : zoomRef.current;
-        const center =
-          followRef.current && base.w < 0.98
-            ? { x: base.x + base.w / 2, y: base.y + base.h / 2 }
-            : undefined;
-        const crop = frameAtZoom(Math.max(1, digital), center);
+        const aimed = followRef.current && base.w < 0.98 && base.h < 0.98;
+        const crop = aimed ? frameOnTarget(base, zoomRef.current) : frameAtZoom(zoomRef.current);
         cropRef.current = crop;
         placeVideo(video, finder, crop, facingRef.current === "user");
-        const nextMag = zoomRef.current;
-        const isLocked = followRef.current && crop.w < 0.94;
-        if (Math.abs(nextMag - shown) > 0.04) {
-          shown = nextMag;
-          setMag(nextMag);
+        const effective = 1 / crop.w;
+        if (Math.abs(effective - shown) > 0.04) {
+          shown = effective;
+          setViewMag(effective);
         }
-        setLocked((current) => (current === isLocked ? current : isLocked));
+        setLocked((current) => (current === aimed ? current : aimed));
       }
       requestAnimationFrame(tick);
     };
@@ -427,6 +455,25 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     }
   }
 
+  async function activate() {
+    followRef.current = true;
+    setFollow(true);
+    setOwnInterval(60);
+    onIntervalChange(60);
+    greetedRef.current = true;
+    await enableCamera(facingRef.current);
+    if (!streamRef.current) {
+      greetedRef.current = false;
+      return;
+    }
+    setRunning(true);
+    try {
+      await shoot();
+    } catch (error) {
+      onToast(error instanceof Error ? error.message : "Photo impossible.");
+    }
+  }
+
   async function importFiles(list: FileList | null) {
     const files = [...(list ?? [])];
     if (!files.length) return;
@@ -461,7 +508,12 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "command", targetId: selected.deviceId, command, intervalSec: seconds }),
     });
-    if (!res.ok) onToast("Le téléphone n’a pas reçu la commande.");
+    const payload = (await res.json().catch(() => ({}))) as { commandId?: number };
+    if (!res.ok || typeof payload.commandId !== "number") {
+      onToast("Le téléphone n’a pas reçu la commande.");
+      return;
+    }
+    setPending({ action: command, id: payload.commandId });
   }
 
   return (
@@ -499,7 +551,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
                   pushNativeZoom();
                 }}
               />
-              <span>×{mag.toFixed(1)}</span>
+              <span>×{viewMag.toFixed(1)}</span>
               <button type="button" className={follow ? "on" : ""} aria-pressed={follow} onClick={toggleFollow}>
                 Suivi
               </button>
@@ -508,7 +560,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
           {!ready ? (
             <div className="viewfinder-empty">
               <p>Place le téléphone devant l’écran, le tableau ou la feuille.</p>
-              <button type="button" className="lime" onClick={() => enableCamera(facing)}>
+              <button type="button" className="lime" onClick={() => void activate()}>
                 Activer la caméra
               </button>
             </div>
@@ -541,6 +593,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
         <label className="field">
           <span>{wide ? "Une photo toutes les, pour le téléphone choisi" : "Une photo toutes les"}</span>
           <select
+            className={pending?.action === "interval" ? "armed" : ""}
             value={String(wide ? selected?.intervalSec || intervalSec : ownInterval)}
             disabled={wide && !selected}
             onChange={(event) => {
@@ -570,16 +623,33 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
             <TipButton label="QR" className="icon-btn lime" onClick={onShowQr}>
               <Glyph name="qr" />
             </TipButton>
-            {aimed ? (
-              <TipButton label="Arrêter" className="icon-btn" onClick={() => void sendCommand("stop")}>
+            {pending?.action === "stop" || (pending?.action !== "start" && aimed) ? (
+              <TipButton
+                label="Arrêter"
+                className={pending?.action === "stop" ? "icon-btn armed" : "icon-btn"}
+                pressed={pending?.action === "stop"}
+                onClick={() => void sendCommand("stop")}
+              >
                 <Glyph name="stop" />
               </TipButton>
             ) : (
-              <TipButton label="Démarrer" className="icon-btn lime" disabled={!selected} onClick={() => void sendCommand("start")}>
+              <TipButton
+                label="Démarrer"
+                className={pending?.action === "start" ? "icon-btn armed" : "icon-btn lime"}
+                pressed={pending?.action === "start"}
+                disabled={!selected}
+                onClick={() => void sendCommand("start")}
+              >
                 <Glyph name="play" />
               </TipButton>
             )}
-            <TipButton label="Photo" className="icon-btn" disabled={!selected} onClick={() => void sendCommand("shoot")}>
+            <TipButton
+              label="Photo"
+              className={pending?.action === "shoot" ? "icon-btn armed" : "icon-btn"}
+              pressed={pending?.action === "shoot"}
+              disabled={!selected}
+              onClick={() => void sendCommand("shoot")}
+            >
               <Glyph name="shutter" />
             </TipButton>
             <TipButton label="Importer" className="icon-btn" onClick={() => fileRef.current?.click()}>
@@ -626,7 +696,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
             </div>
             <p className="hint">
               {ready
-                ? "Le curseur zoome avec l’appareil du téléphone, qui refait la mise au point."
+                ? "Suivi recadre sur le tableau, l’écran ou la feuille, et suit si le téléphone bouge."
                 : "Garde cette page ouverte. Le même compte doit être connecté sur l’ordinateur."}
             </p>
           </>

@@ -26,5 +26,5 @@ export async function POST(request: Request) {
   const session = newToken();
   await createSession(user.id, hashToken(session));
   await setSessionCookie(session);
-  return json({ user: publicUser(user) });
+  return json({ user: publicUser(user), token: session });
 }

@@ -25,6 +25,7 @@ function present(cameras: Awaited<ReturnType<typeof listLiveCameras>>, fallbackI
     running: camera.running === true,
     intervalSec: camera.intervalSec || fallbackInterval,
     label: camera.label || (camera.phone !== false ? "Téléphone" : "Ordinateur"),
+    ack: camera.ack || 0,
   }));
 }
 
@@ -53,13 +54,13 @@ export async function POST(request: Request, ctx: Ctx) {
     }
     const intervalSec = Number(body?.intervalSec);
     if (command === "interval" && !isInterval(intervalSec)) return json({ error: "Intervalle invalide." }, 400);
-    await pushCameraCommand(id, {
+    const commandId = await pushCameraCommand(id, {
       deviceId: targetId,
       action: command,
       intervalSec: command === "interval" ? intervalSec : undefined,
     });
     const cameras = await listLiveCameras(id);
-    return json({ cameras: present(cameras, access.group.intervalSec) });
+    return json({ cameras: present(cameras, access.group.intervalSec), commandId });
   }
 
   if (!/^[0-9a-f-]{16,80}$/i.test(deviceId)) return json({ error: "Appareil invalide." }, 400);
@@ -70,6 +71,7 @@ export async function POST(request: Request, ctx: Ctx) {
     running: body?.running === true,
     intervalSec: isInterval(intervalSec) ? intervalSec : undefined,
     givenName: givenName || undefined,
+    ack: Number(body?.ack) > 0 ? Number(body.ack) : undefined,
   });
   const cameras = await listLiveCameras(id);
   return json({

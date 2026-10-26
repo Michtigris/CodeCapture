@@ -57,6 +57,7 @@ export async function GET(_request: Request, ctx: Ctx) {
       running: camera.running === true,
       intervalSec: camera.intervalSec || group.intervalSec,
       label: camera.label || (camera.phone !== false ? "Téléphone" : "Ordinateur"),
+      ack: camera.ack || 0,
     })),
   });
 }

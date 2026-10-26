@@ -480,7 +480,14 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
   color: var(--text);
 }
 .icon-btn.lime { background: var(--lime); color: var(--ink); border-color: transparent; }
+.icon-btn.armed {
+  background: var(--lime);
+  color: var(--ink);
+  border-color: transparent;
+  box-shadow: inset 0 3px 0 rgba(0, 0, 0, 0.35);
+}
 .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.field select.armed { border-color: var(--lime); box-shadow: inset 0 0 0 1px var(--lime); }
 .tip { position: relative; display: inline-flex; }
 .tip [role="tooltip"] {
   position: absolute;
@@ -641,10 +648,21 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
 .dot-pop button:hover { background: var(--bg-3); }
 .add-file { padding: 12px; display: grid; gap: 10px; }
 .tab.plus { padding: 8px 14px; font-size: 20px; line-height: 1; }
-.capture-shot { margin: 0 12px 12px; background: #11140f; display: grid; justify-items: center; gap: 8px; padding: 12px; }
-.ocr-stage { position: relative; width: fit-content; max-width: 100%; container-type: size; }
+.capture-shot {
+  flex: 1;
+  min-height: 240px;
+  margin: 0 12px 12px;
+  background: #11140f;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 8px;
+  padding: 12px;
+  overflow: auto;
+}
+.ocr-stage { position: relative; width: fit-content; max-width: 100%; }
 .ocr-stage img { display: block; max-width: 100%; max-height: min(68vh, 760px); width: auto; height: auto; }
-.ocr-layer { position: absolute; inset: 0; }
+.ocr-layer { position: absolute; inset: 0; container-type: size; }
 .ocr-word {
   position: absolute;
   box-sizing: border-box;

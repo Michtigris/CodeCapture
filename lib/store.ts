@@ -68,6 +68,7 @@ export type CameraRecord = {
   intervalSec: number;
   label: string;
   command?: CameraCommand | null;
+  ack?: number;
 };
 
 export type CameraCommand = {
@@ -450,6 +451,7 @@ type LiveDevice = {
   running?: boolean;
   intervalSec?: number;
   label?: string;
+  ack?: number;
 };
 
 type LiveState = {
@@ -496,6 +498,7 @@ function freshCameras(groupId: string, devices: LiveDevice[], maxAge: number): C
       running: item.running === true,
       intervalSec: item.intervalSec || 0,
       label: item.label || "",
+      ack: item.ack,
     }));
 }
 
@@ -539,7 +542,7 @@ export async function touchCamera(
   groupId: string,
   deviceId: string,
   phone: boolean,
-  status?: { camera?: boolean; running?: boolean; intervalSec?: number; givenName?: string },
+  status?: { camera?: boolean; running?: boolean; intervalSec?: number; givenName?: string; ack?: number },
 ): Promise<{ command: CameraCommand | null; watch: boolean }> {
   if (storageMode() === "file") {
     let command: CameraCommand | null = null;
@@ -554,6 +557,7 @@ export async function touchCamera(
         if (status?.camera !== undefined) current.camera = status.camera;
         if (status?.running !== undefined) current.running = status.running;
         if (status?.intervalSec) current.intervalSec = status.intervalSec;
+        if (status?.ack) current.ack = status.ack;
         if (phone && (status?.givenName || !current.label)) {
           current.label = phoneLabel(
             db.cameras
@@ -606,6 +610,7 @@ export async function touchCamera(
     current.running !== nextRunning ||
     (current.intervalSec || 0) !== nextInterval ||
     (current.label || "") !== nextLabel ||
+    (status?.ack ? current.ack !== status.ack : false) ||
     now - Date.parse(previousSeen) > 20_000;
   if (!current) {
     current = { id: deviceId, seenAt, phone, label: nextLabel };
@@ -617,6 +622,7 @@ export async function touchCamera(
   current.running = nextRunning;
   current.intervalSec = nextInterval;
   current.label = nextLabel;
+  if (status?.ack) current.ack = status.ack;
   if (changed) await writeLive(groupId, { ...state, command: null, watch: null, seq: state.seq });
   const control = await readControl(groupId);
   let command: CameraCommand | null = null;
@@ -633,7 +639,8 @@ export async function touchCamera(
   return { command, watch: false };
 }
 
-export async function pushCameraCommand(groupId: string, command: Omit<CameraCommand, "id">): Promise<void> {
+export async function pushCameraCommand(groupId: string, command: Omit<CameraCommand, "id">): Promise<number> {
+  const id = Date.now();
   if (storageMode() === "file") {
     await update((db) => {
       let target = db.cameras.find((item) => item.groupId === groupId && item.deviceId === command.deviceId);
@@ -650,23 +657,24 @@ export async function pushCameraCommand(groupId: string, command: Omit<CameraCom
         };
         db.cameras.push(target);
       }
-      target.command = { ...command, id: Date.now() };
+      target.command = { ...command, id };
       if (command.action === "interval" && command.intervalSec) target.intervalSec = command.intervalSec;
-      if (command.action === "start") target.running = true;
-      if (command.action === "stop") target.running = false;
     });
-    return;
+    return id;
   }
   const control = await readControl(groupId);
   control.seq += 1;
   control.command = { ...command, id: control.seq };
   await writeControl(groupId, control);
-  const state = await readLive(groupId);
-  const target = state.devices.find((item) => item.id === command.deviceId);
-  if (target && command.action === "interval" && command.intervalSec) target.intervalSec = command.intervalSec;
-  if (target && command.action === "start") target.running = true;
-  if (target && command.action === "stop") target.running = false;
-  if (target) await writeLive(groupId, { ...state, command: null, watch: null, seq: state.seq });
+  if (command.action === "interval" && command.intervalSec) {
+    const state = await readLive(groupId);
+    const target = state.devices.find((item) => item.id === command.deviceId);
+    if (target) {
+      target.intervalSec = command.intervalSec;
+      await writeLive(groupId, { ...state, command: null, watch: null, seq: state.seq });
+    }
+  }
+  return control.seq;
 }
 
 export async function listLiveCameras(groupId: string): Promise<CameraRecord[]> {
@@ -679,6 +687,7 @@ export async function listLiveCameras(groupId: string): Promise<CameraRecord[]> 
       running: item.running === true,
       intervalSec: item.intervalSec || 0,
       label: item.label || "",
+      ack: item.ack,
     })), 45_000));
   }
   return freshCameras(groupId, (await readLive(groupId)).devices, 45_000);
