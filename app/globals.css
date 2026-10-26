@@ -327,7 +327,7 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
 }
 .pane-photos { overflow: visible; }
 .pane-files { grid-column: 2; grid-row: 1; }
-.viewfinder.filming { max-height: 250px; }
+.viewfinder.filming { max-height: min(58vh, 520px); touch-action: none; }
 .pane-head, .sheet-bar {
   display: flex;
   justify-content: space-between;
@@ -366,6 +366,39 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
   text-align: center;
 }
 .viewfinder-empty p { margin: 0; max-width: 28ch; }
+.lock-mark {
+  position: absolute;
+  inset: 10px;
+  z-index: 1;
+  pointer-events: none;
+  border: 2px solid var(--lime);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+.zoom-bar {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.zoom-bar button {
+  min-width: 40px;
+  height: 36px;
+  padding: 0 10px;
+  background: rgba(8, 9, 8, 0.72);
+  color: #f3f5ef;
+  border: 1px solid rgba(243, 245, 239, 0.28);
+}
+.zoom-bar button.on { background: var(--lime); color: var(--ink); border-color: transparent; }
+.zoom-bar span {
+  min-width: 3.2em;
+  color: #f3f5ef;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
 .phone-stage {
   height: 240px;
   margin: 0 12px;

@@ -7,11 +7,21 @@ export async function fileToJpeg(file: File): Promise<Blob> {
   }
 }
 
-export function frameFromVideo(video: HTMLVideoElement, maxEdge = 1600, quality = 0.82): Promise<Blob> {
+export function frameFromVideo(
+  video: HTMLVideoElement,
+  crop?: { x: number; y: number; w: number; h: number },
+  maxEdge = 1800,
+  quality = 0.86,
+): Promise<Blob> {
   if (!video.videoWidth || !video.videoHeight) {
     return Promise.reject(new Error("La caméra n'est pas prête."));
   }
-  return drawJpeg(video.videoWidth, video.videoHeight, (ctx, w, h) => ctx.drawImage(video, 0, 0, w, h), maxEdge, quality);
+  const region = crop ?? { x: 0, y: 0, w: 1, h: 1 };
+  const sx = Math.max(0, Math.round(region.x * video.videoWidth));
+  const sy = Math.max(0, Math.round(region.y * video.videoHeight));
+  const sw = Math.max(1, Math.min(video.videoWidth - sx, Math.round(region.w * video.videoWidth)));
+  const sh = Math.max(1, Math.min(video.videoHeight - sy, Math.round(region.h * video.videoHeight)));
+  return drawJpeg(sw, sh, (ctx, w, h) => ctx.drawImage(video, sx, sy, sw, sh, 0, 0, w, h), maxEdge, quality);
 }
 
 async function loadBitmap(file: File): Promise<ImageBitmap> {
@@ -48,6 +58,8 @@ function drawJpeg(
   canvas.height = height;
   const ctx = canvas.getContext("2d");
   if (!ctx) return Promise.reject(new Error("Impossible de préparer la photo."));
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
   draw(ctx, width, height);
   return new Promise((resolve, reject) => {
     canvas.toBlob(

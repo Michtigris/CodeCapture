@@ -6,6 +6,7 @@ import type { CameraDTO } from "@/lib/types";
 import { deviceId } from "./device";
 import { formatRemain } from "./format";
 import { fileToJpeg, frameFromVideo } from "./images";
+import { applyZoom, clampZoom, detectTarget, FULL, placeVideo, smoothLock, type NormRect } from "./targetLock";
 import { TipButton } from "./TipButton";
 
 type Props = {
@@ -21,7 +22,13 @@ type Props = {
 
 export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, onCapture, onToast, onShowQr, ownerName = "" }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const finderRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const cropRef = useRef<NormRect>(FULL);
+  const zoomRef = useRef(1);
+  const followRef = useRef(true);
+  const pinchRef = useRef<{ dist: number; zoom: number } | null>(null);
+  const hardwareZoomRef = useRef<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const nativeRef = useRef<HTMLInputElement>(null);
   const onCaptureRef = useRef(onCapture);
@@ -42,6 +49,9 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   const [selfId, setSelfId] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [ownInterval, setOwnInterval] = useState(intervalSec);
+  const [follow, setFollow] = useState(true);
+  const [locked, setLocked] = useState(false);
+  const [mag, setMag] = useState(1);
   const readyRef = useRef(false);
   const runningRef = useRef(false);
   const facingRef = useRef(facing);
@@ -53,6 +63,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   runningRef.current = running;
   facingRef.current = facing;
   enableRef.current = enableCamera;
+  followRef.current = follow;
 
   useEffect(() => {
     setSecure(window.isSecureContext);
@@ -126,7 +137,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     if (!video) throw new Error("La caméra n'est pas prête.");
     setFlash(true);
     window.setTimeout(() => setFlash(false), 140);
-    const blob = await frameFromVideo(video);
+    const blob = await frameFromVideo(video, cropRef.current);
     await onCaptureRef.current(blob);
   }
   shootRef.current = shoot;
@@ -178,7 +189,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
         video: {
           facingMode: { ideal: nextFacing },
           width: { ideal: 1920 },
-          height: { ideal: 1080 },
+          height: { ideal: 1440 },
         },
       });
       streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -187,6 +198,20 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
       if (!video) return;
       video.srcObject = stream;
       await video.play();
+      const track = stream.getVideoTracks()[0];
+      const caps = track?.getCapabilities?.() as { focusMode?: string[] } | undefined;
+      if (track && caps?.focusMode?.includes("continuous")) {
+        try {
+          await track.applyConstraints({ advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet] });
+        } catch {
+          /* le navigateur garde sa mise au point */
+        }
+      }
+      zoomRef.current = 1;
+      hardwareZoomRef.current = null;
+      cropRef.current = FULL;
+      setMag(1);
+      setLocked(false);
       setFacing(nextFacing);
       setReady(true);
     } catch (error) {
@@ -251,9 +276,124 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     };
   }, [groupId, ownInterval, ownerName]);
 
+  useEffect(() => {
+    if (!ready || wide) return;
+    const video = videoRef.current;
+    const finder = finderRef.current;
+    if (!video || !finder) return;
+    const sample = document.createElement("canvas");
+    sample.width = 96;
+    sample.height = 72;
+    const ctx = sample.getContext("2d", { willReadFrequently: true });
+    let lock: NormRect | null = null;
+    let misses = 0;
+    let shown = 1;
+    let stopped = false;
+    let last = 0;
+
+    const tick = (time: number) => {
+      if (stopped) return;
+      if (time - last > 120 && video.videoWidth && ctx) {
+        last = time;
+        let base = FULL;
+        if (followRef.current) {
+          ctx.drawImage(video, 0, 0, sample.width, sample.height);
+          const found = detectTarget(ctx.getImageData(0, 0, sample.width, sample.height));
+          if (found) {
+            misses = 0;
+            lock = smoothLock(lock, found);
+          } else {
+            misses += 1;
+            lock = misses > 10 ? smoothLock(lock, FULL) : lock;
+          }
+          base = lock ?? FULL;
+        } else {
+          lock = null;
+          misses = 0;
+        }
+        const track = streamRef.current?.getVideoTracks()[0];
+        const caps = track?.getCapabilities?.() as { zoom?: { min: number; max: number } } | undefined;
+        const optical = !followRef.current && !!caps?.zoom;
+        if (track && caps?.zoom) {
+          const wanted = optical
+            ? Math.min(caps.zoom.max, Math.max(caps.zoom.min, zoomRef.current))
+            : caps.zoom.min;
+          if (wanted !== hardwareZoomRef.current) {
+            hardwareZoomRef.current = wanted;
+            void track.applyConstraints({ advanced: [{ zoom: wanted } as MediaTrackConstraintSet] }).catch(() => {
+              hardwareZoomRef.current = null;
+            });
+          }
+        }
+        const crop = optical ? FULL : applyZoom(base, zoomRef.current);
+        cropRef.current = crop;
+        placeVideo(video, finder, crop, facingRef.current === "user");
+        const nextMag = optical ? zoomRef.current : 1 / crop.w;
+        const isLocked = followRef.current && crop.w < 0.94;
+        if (Math.abs(nextMag - shown) > 0.04) {
+          shown = nextMag;
+          setMag(nextMag);
+        }
+        setLocked((current) => (current === isLocked ? current : isLocked));
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    return () => {
+      stopped = true;
+    };
+  }, [ready, wide]);
+
+  useEffect(() => {
+    const finder = finderRef.current;
+    if (!finder || !ready || wide) return;
+    const distance = (touches: TouchList) => {
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      return Math.hypot(dx, dy) || 1;
+    };
+    const start = (event: TouchEvent) => {
+      if (event.touches.length === 2) pinchRef.current = { dist: distance(event.touches), zoom: zoomRef.current };
+    };
+    const move = (event: TouchEvent) => {
+      if (event.touches.length !== 2 || !pinchRef.current) return;
+      event.preventDefault();
+      zoomRef.current = clampZoom(pinchRef.current.zoom * (distance(event.touches) / pinchRef.current.dist), followRef.current);
+    };
+    const end = () => {
+      pinchRef.current = null;
+    };
+    finder.addEventListener("touchstart", start, { passive: true });
+    finder.addEventListener("touchmove", move, { passive: false });
+    finder.addEventListener("touchend", end);
+    finder.addEventListener("touchcancel", end);
+    return () => {
+      finder.removeEventListener("touchstart", start);
+      finder.removeEventListener("touchmove", move);
+      finder.removeEventListener("touchend", end);
+      finder.removeEventListener("touchcancel", end);
+    };
+  }, [ready, wide]);
+
+  function nudgeZoom(factor: number) {
+    zoomRef.current = clampZoom(zoomRef.current * factor, followRef.current);
+  }
+
+  function toggleFollow() {
+    const next = !followRef.current;
+    followRef.current = next;
+    if (!next && zoomRef.current < 1) zoomRef.current = 1;
+    setFollow(next);
+    setLocked(false);
+  }
+
   function disableCamera() {
     setRunning(false);
     setReady(false);
+    setLocked(false);
+    zoomRef.current = 1;
+    hardwareZoomRef.current = null;
+    cropRef.current = FULL;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
@@ -312,7 +452,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
         {running || aimed ? <span className="tally">Série en cours</span> : null}
       </div>
       {layoutReady && !wide ? (
-        <div className={ready ? "viewfinder filming" : "viewfinder"}>
+        <div ref={finderRef} className={ready ? "viewfinder filming" : "viewfinder"}>
           <video
             ref={videoRef}
             autoPlay
@@ -323,6 +463,21 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
               transform: facing === "user" ? "scaleX(-1)" : undefined,
             }}
           />
+          {ready && locked ? <span className="lock-mark" /> : null}
+          {ready ? (
+            <div className="zoom-bar">
+              <button type="button" aria-label="Dézoomer" onClick={() => nudgeZoom(1 / 1.2)}>
+                −
+              </button>
+              <span>{mag.toFixed(1)}×</span>
+              <button type="button" aria-label="Zoomer" onClick={() => nudgeZoom(1.2)}>
+                +
+              </button>
+              <button type="button" className={follow ? "on" : ""} aria-pressed={follow} onClick={toggleFollow}>
+                Suivi
+              </button>
+            </div>
+          ) : null}
           {!ready ? (
             <div className="viewfinder-empty">
               <p>Place le téléphone devant l’écran, le tableau ou la feuille.</p>
@@ -442,7 +597,11 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
                 </button>
               ) : null}
             </div>
-            <p className="hint">Garde cette page ouverte. Le même compte doit être connecté sur l’ordinateur.</p>
+            <p className="hint">
+              {ready
+                ? "Pince l’image pour zoomer. Suivi garde le tableau entier si le téléphone bouge un peu."
+                : "Garde cette page ouverte. Le même compte doit être connecté sur l’ordinateur."}
+            </p>
           </>
         )}
       </div>
