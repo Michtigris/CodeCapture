@@ -43,6 +43,9 @@ export async function POST(request: Request) {
   if (name.length < 1 || name.length > 60) {
     return json({ error: "Donne un nom de groupe (60 caractères maximum)." }, 400);
   }
+  if (name.toLowerCase() === user.email.toLowerCase()) {
+    return json({ error: "Le nom du groupe n'est pas l'email du compte." }, 400);
+  }
   const group = await createGroup(user.id, name);
   return json({ group });
 }

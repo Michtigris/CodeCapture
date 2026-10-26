@@ -56,6 +56,10 @@ export function GroupsScreen() {
     event.preventDefault();
     const next = name.trim();
     if (!next) return;
+    if (me && next.toLowerCase() === me.email.toLowerCase()) {
+      setError("Le nom du groupe n'est pas l'email du compte.");
+      return;
+    }
     setBusy(true);
     setError("");
     const res = await fetch("/api/groups", {
@@ -150,13 +154,17 @@ export function GroupsScreen() {
           <section className="join-gate">
             <p className="kicker">Aucun groupe</p>
             <h1>Créer ou rejoindre</h1>
-            <form className="creator" onSubmit={createGroup}>
+            <form className="creator" autoComplete="off" onSubmit={createGroup}>
+              <input className="autofill-trap" tabIndex={-1} autoComplete="username" aria-hidden="true" defaultValue="" />
               <input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
+                name="group-label"
                 placeholder="Nom du groupe"
                 maxLength={60}
                 aria-label="Nom du groupe"
+                autoComplete="off"
+                autoCorrect="off"
               />
               <button className="lime" type="submit" disabled={busy || !name.trim()}>
                 {busy ? "Création…" : "Créer"}
@@ -184,13 +192,17 @@ export function GroupsScreen() {
                 <h1>Tes groupes</h1>
               </div>
               <div className="join-actions">
-                <form className="creator" onSubmit={createGroup}>
+                <form className="creator" autoComplete="off" onSubmit={createGroup}>
+              <input className="autofill-trap" tabIndex={-1} autoComplete="username" aria-hidden="true" defaultValue="" />
                   <input
                     value={name}
                     onChange={(event) => setName(event.target.value)}
+                    name="group-label"
                     placeholder="Nom du groupe"
                     maxLength={60}
                     aria-label="Nom du groupe"
+                    autoComplete="off"
+                    autoCorrect="off"
                   />
                   <button className="lime" type="submit" disabled={busy || !name.trim()}>
                     {busy ? "…" : "Créer"}
