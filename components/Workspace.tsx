@@ -86,7 +86,7 @@ export function Workspace({ groupId }: { groupId: string }) {
       } catch {
         /* le prochain passage réessaiera */
       }
-      if (!stop) timer = window.setTimeout(tick, document.hidden ? 12000 : 4000);
+      if (!stop) timer = window.setTimeout(tick, document.hidden ? 12000 : 1000);
     };
     void tick();
     void fetch("/api/auth/me", { cache: "no-store" })

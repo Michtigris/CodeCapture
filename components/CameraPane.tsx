@@ -36,6 +36,8 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   const onCaptureRef = useRef(onCapture);
   const onToastRef = useRef(onToast);
   const shootRef = useRef<() => Promise<void>>(async () => {});
+  const greetedRef = useRef(false);
+  const commandShotRef = useRef(false);
   const lastError = useRef("");
   const [facing, setFacing] = useState<"environment" | "user">("environment");
   const [ready, setReady] = useState(false);
@@ -224,51 +226,65 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   }, [intervalSec]);
 
   useEffect(() => {
+    if (!ready || wide || greetedRef.current) return;
+    if (commandShotRef.current) {
+      commandShotRef.current = false;
+      greetedRef.current = true;
+      return;
+    }
+    greetedRef.current = true;
+    void shootRef.current().catch((error) => {
+      greetedRef.current = false;
+      onToastRef.current(error instanceof Error ? error.message : "Photo impossible.");
+    });
+  }, [ready, wide]);
+
+  useEffect(() => {
     let stop = false;
+    let busy = false;
     const media = window.matchMedia("(max-width: 900px), (pointer: coarse) and (max-device-width: 1100px)");
     const beat = async () => {
-      if (stop || document.hidden || !media.matches) return;
-      const res = await fetch(`/api/groups/${groupId}/camera`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          deviceId: deviceId(),
-          phone: media.matches,
-          camera: readyRef.current,
-          running: runningRef.current,
-          intervalSec: ownInterval,
-          givenName: media.matches ? ownerName : "",
-        }),
-      });
-      if (!res.ok || stop) return;
-      const payload = (await res.json()) as {
-        command?: { action?: string; intervalSec?: number } | null;
-      };
-      const command = payload.command;
-      if (!command?.action) return;
-      if (command.action === "interval" && command.intervalSec) setOwnInterval(command.intervalSec);
-      if (command.action === "stop") setRunning(false);
-      if (!media.matches) return;
-      if (command.action === "shoot") {
-        try {
-          if (!readyRef.current) await enableRef.current(facingRef.current);
-          await shootRef.current();
-        } catch (error) {
-          onToastRef.current(error instanceof Error ? error.message : "Photo impossible.");
+      if (stop || busy || document.hidden || !media.matches) return;
+      busy = true;
+      try {
+        const res = await fetch(`/api/groups/${groupId}/camera`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            deviceId: deviceId(),
+            phone: media.matches,
+            camera: readyRef.current,
+            running: runningRef.current,
+            intervalSec: ownInterval,
+            givenName: media.matches ? ownerName : "",
+          }),
+        });
+        if (!res.ok || stop) return;
+        const payload = (await res.json()) as {
+          command?: { action?: string; intervalSec?: number } | null;
+        };
+        const command = payload.command;
+        if (!command?.action) return;
+        if (command.action === "interval" && command.intervalSec) setOwnInterval(command.intervalSec);
+        if (command.action === "stop") setRunning(false);
+        if (!media.matches) return;
+        if (command.action === "shoot" || command.action === "start") {
+          commandShotRef.current = true;
+          try {
+            if (!readyRef.current) await enableRef.current(facingRef.current);
+            await shootRef.current();
+            if (command.action === "start") setRunning(true);
+          } catch (error) {
+            commandShotRef.current = false;
+            onToastRef.current(error instanceof Error ? error.message : "Photo impossible.");
+          }
         }
-      }
-      if (command.action === "start") {
-        try {
-          if (!readyRef.current) await enableRef.current(facingRef.current);
-          await shootRef.current();
-          setRunning(true);
-        } catch (error) {
-          onToastRef.current(error instanceof Error ? error.message : "Photo impossible.");
-        }
+      } finally {
+        busy = false;
       }
     };
     void beat();
-    const timer = window.setInterval(() => void beat(), 5000);
+    const timer = window.setInterval(() => void beat(), 400);
     return () => {
       stop = true;
       window.clearInterval(timer);

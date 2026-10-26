@@ -67,6 +67,7 @@ export type CameraRecord = {
   running: boolean;
   intervalSec: number;
   label: string;
+  command?: CameraCommand | null;
 };
 
 export type CameraCommand = {
@@ -541,10 +542,12 @@ export async function touchCamera(
   status?: { camera?: boolean; running?: boolean; intervalSec?: number; givenName?: string },
 ): Promise<{ command: CameraCommand | null; watch: boolean }> {
   if (storageMode() === "file") {
+    let command: CameraCommand | null = null;
     await update((db) => {
       const now = Date.now();
+      const queued = db.cameras.find((item) => item.groupId === groupId && item.deviceId === deviceId)?.command ?? null;
       db.cameras = db.cameras.filter((item) => now - Date.parse(item.seenAt) < 60_000);
-      const current = db.cameras.find((item) => item.groupId === groupId && item.deviceId === deviceId);
+      let current = db.cameras.find((item) => item.groupId === groupId && item.deviceId === deviceId);
       if (current) {
         current.seenAt = new Date(now).toISOString();
         current.phone = phone;
@@ -561,7 +564,7 @@ export async function touchCamera(
           );
         }
       } else {
-        db.cameras.push({
+        current = {
           groupId,
           deviceId,
           seenAt: new Date(now).toISOString(),
@@ -570,10 +573,18 @@ export async function touchCamera(
           running: status?.running === true,
           intervalSec: status?.intervalSec || 0,
           label: phone ? phoneLabel([], deviceId, status?.givenName) : "",
-        });
+        };
+        db.cameras.push(current);
+      }
+      current.command = null;
+      if (queued?.deviceId === deviceId) {
+        command = queued;
+        if (queued.action === "interval" && queued.intervalSec) current.intervalSec = queued.intervalSec;
+        if (queued.action === "start") current.running = true;
+        if (queued.action === "stop") current.running = false;
       }
     });
-    return { command: null, watch: false };
+    return { command, watch: false };
   }
   const now = Date.now();
   const state = await readLive(groupId);
@@ -623,7 +634,29 @@ export async function touchCamera(
 }
 
 export async function pushCameraCommand(groupId: string, command: Omit<CameraCommand, "id">): Promise<void> {
-  if (storageMode() === "file") return;
+  if (storageMode() === "file") {
+    await update((db) => {
+      let target = db.cameras.find((item) => item.groupId === groupId && item.deviceId === command.deviceId);
+      if (!target) {
+        target = {
+          groupId,
+          deviceId: command.deviceId,
+          seenAt: new Date().toISOString(),
+          phone: true,
+          camera: false,
+          running: false,
+          intervalSec: command.intervalSec || 0,
+          label: "Téléphone",
+        };
+        db.cameras.push(target);
+      }
+      target.command = { ...command, id: Date.now() };
+      if (command.action === "interval" && command.intervalSec) target.intervalSec = command.intervalSec;
+      if (command.action === "start") target.running = true;
+      if (command.action === "stop") target.running = false;
+    });
+    return;
+  }
   const control = await readControl(groupId);
   control.seq += 1;
   control.command = { ...command, id: control.seq };
