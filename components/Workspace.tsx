@@ -744,13 +744,10 @@ export function Workspace({ groupId }: { groupId: string }) {
             <div className="qr-frame" onClick={(event) => event.stopPropagation()}>
               <QrMark path={data.group.code ? `/${data.group.code}` : `/groupe/${groupId}`} label="QR code pour connecter un téléphone à ce groupe" />
             </div>
-            <p>Scanne avec chaque téléphone. Plusieurs peuvent photographier en même temps.</p>
-            <p className="muted">Même compte, puis active la caméra.</p>
+            <p>Scanne avec ton téléphone pour le transformer en caméra.</p>
             {phoneCount > 0 ? (
               <p className="tally">{phoneCount > 1 ? `${phoneCount} téléphones connectés` : "1 téléphone connecté"}</p>
-            ) : (
-              <p className="muted">Aucun téléphone connecté.</p>
-            )}
+            ) : null}
           </div>
         </div>
       ) : null}
