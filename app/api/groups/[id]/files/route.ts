@@ -1,0 +1,38 @@
+import { json } from "@/lib/http";
+import { getCurrentUser } from "@/lib/session";
+import { getGroup, isMember, saveManualFile } from "@/lib/store";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+type Ctx = { params: Promise<{ id: string }> };
+
+export async function POST(request: Request, ctx: Ctx) {
+  const { id } = await ctx.params;
+  const user = await getCurrentUser();
+  if (!user) return json({ error: "Connexion requise." }, 401);
+  const group = await getGroup(id);
+  if (!group || !isMember(group, user.id)) return json({ error: "Groupe introuvable." }, 404);
+
+  const body = await request.json().catch(() => null);
+  const filename = String(body?.filename ?? "");
+  const content = String(body?.content ?? "");
+  const captureId = body?.captureId ? String(body.captureId) : null;
+  const archivePending = body?.archivePending === true;
+  try {
+    const capture = await saveManualFile({ groupId: group.id, captureId, filename, content, archivePending });
+    return json({
+      capture: {
+        id: capture.id,
+        createdAt: capture.createdAt,
+        notes: capture.notes,
+        photoCount: capture.photoIds.length,
+        files: capture.files,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Enregistrement impossible.";
+    const status = message.startsWith("Le ") || message.startsWith("Nom ") ? 400 : 500;
+    return json({ error: message }, status);
+  }
+}
