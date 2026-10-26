@@ -72,13 +72,16 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   useEffect(() => {
     setSecure(window.isSecureContext);
     setSelfId(deviceId());
-    const media = window.matchMedia("(min-width: 901px)");
-    const apply = () => setWide(media.matches);
+    const desktop = window.matchMedia("(min-width: 901px)");
+    const handheld = window.matchMedia("(pointer: coarse) and (max-device-width: 1100px)");
+    const apply = () => setWide(desktop.matches && !handheld.matches);
     apply();
     setLayoutReady(true);
-    media.addEventListener("change", apply);
+    desktop.addEventListener("change", apply);
+    handheld.addEventListener("change", apply);
     return () => {
-      media.removeEventListener("change", apply);
+      desktop.removeEventListener("change", apply);
+      handheld.removeEventListener("change", apply);
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
   }, []);
@@ -139,6 +142,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   async function shoot() {
     const video = videoRef.current;
     if (!video) throw new Error("La caméra n'est pas prête.");
+    if (!video.videoWidth) await waitForFrame(video);
     setFlash(true);
     window.setTimeout(() => setFlash(false), 140);
     const blob = await frameFromVideo(video, cropRef.current);
@@ -196,15 +200,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
       video.srcObject = stream;
       await video.play();
       const track = stream.getVideoTracks()[0];
-      let range = track ? zoomRangeOf(track) : null;
-      if (track && !range) {
-        try {
-          await track.applyConstraints({ advanced: [{ zoom: 1 } as MediaTrackConstraintSet] });
-          range = zoomRangeOf(track);
-        } catch {
-          range = null;
-        }
-      }
+      const range = track ? zoomRangeOf(track) : null;
       zoomRangeRef.current = range;
       nativeBrokenRef.current = !range;
       if (track) await focusTrack(track).catch(() => undefined);
@@ -270,10 +266,10 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
         if (!media.matches) return;
         if (command.action === "shoot" || command.action === "start") {
           commandShotRef.current = true;
+          if (command.action === "start") setRunning(true);
           try {
             if (!readyRef.current) await enableRef.current(facingRef.current);
             await shootRef.current();
-            if (command.action === "start") setRunning(true);
           } catch (error) {
             commandShotRef.current = false;
             onToastRef.current(error instanceof Error ? error.message : "Photo impossible.");
@@ -423,9 +419,9 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   }
 
   async function startSeries() {
+    setRunning(true);
     try {
       await shoot();
-      setRunning(true);
     } catch (error) {
       onToast(error instanceof Error ? error.message : "Photo impossible.");
     }
@@ -667,10 +663,26 @@ type ZoomRange = { min: number; max: number; step?: number };
 function zoomRangeOf(track: MediaStreamTrack): ZoomRange | null {
   const caps = track.getCapabilities?.() as { zoom?: ZoomRange } | undefined;
   const zoom = caps?.zoom;
-  if (zoom && zoom.max > zoom.min) return zoom;
-  const supported = navigator.mediaDevices?.getSupportedConstraints?.() as { zoom?: boolean } | undefined;
-  if (supported?.zoom) return { min: 1, max: 10, step: 0.1 };
-  return null;
+  if (!zoom || !(zoom.max > zoom.min)) return null;
+  return zoom;
+}
+
+function waitForFrame(video: HTMLVideoElement): Promise<void> {
+  if (video.videoWidth) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      video.removeEventListener("loadeddata", done);
+      reject(new Error("La caméra n'est pas prête."));
+    }, 2500);
+    const done = () => {
+      if (!video.videoWidth) return;
+      window.clearTimeout(timer);
+      video.removeEventListener("loadeddata", done);
+      resolve();
+    };
+    video.addEventListener("loadeddata", done);
+    done();
+  });
 }
 
 function nativeZoomFor(slider: number, range: ZoomRange): number {
@@ -680,25 +692,15 @@ function nativeZoomFor(slider: number, range: ZoomRange): number {
   return Math.min(range.max, Math.max(range.min, range.min + steps * range.step));
 }
 
-async function openPhoneCamera(facing: "environment" | "user") {
-  const supported = navigator.mediaDevices.getSupportedConstraints?.() ?? {};
-  const base: MediaTrackConstraints = {
-    facingMode: { ideal: facing },
-    width: { ideal: 1920 },
-    height: { ideal: 1440 },
-  };
-  const video = {
-    ...base,
-    ...("zoom" in supported ? { zoom: { ideal: 1 } } : {}),
-    ...("focusMode" in supported ? { focusMode: "continuous" } : {}),
-  } as MediaTrackConstraints;
-  try {
-    return await navigator.mediaDevices.getUserMedia({ audio: false, video });
-  } catch (error) {
-    const name = error instanceof DOMException ? error.name : "";
-    if (name === "NotAllowedError" || name === "NotFoundError" || name === "NotReadableError") throw error;
-    return navigator.mediaDevices.getUserMedia({ audio: false, video: base });
-  }
+function openPhoneCamera(facing: "environment" | "user") {
+  return navigator.mediaDevices.getUserMedia({
+    audio: false,
+    video: {
+      facingMode: { ideal: facing },
+      width: { ideal: 1920 },
+      height: { ideal: 1440 },
+    },
+  });
 }
 
 async function focusTrack(track: MediaStreamTrack) {
