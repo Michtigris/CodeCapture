@@ -1,5 +1,5 @@
 export function requestOrigin(request: Request): string {
-  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "asile.websr.fr";
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "codecapture.websr.fr";
   const proto = request.headers.get("x-forwarded-proto") ?? (host.includes("localhost") ? "http" : "https");
   return `${proto}://${host}`;
 }
