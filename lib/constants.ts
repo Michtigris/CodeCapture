@@ -33,6 +33,7 @@ Comment lire les photos :
 - Le nom du fichier est celui qui est affiché : onglet, titre ou chemin, dossiers inclus. Exemple : B2/POO/Animal.php. Ne raccourcis pas le chemin et n'invente pas un nom.
 - Plusieurs photos du même fichier deviennent un seul fichier. Fusionne-les du haut du fichier vers la suite. Ne recommence pas le fichier à chaque photo.
 - Recopie le code tel quel : indentation, lignes vides, commentaires, fautes. N'améliore rien et n'invente aucune ligne.
+- Écris les espaces, tabulations et signes < > & tels quels. N'utilise aucune entité HTML : pas de &#x20;, &nbsp;, &lt; ou &amp;.
 - Un morceau illisible s'écrit [illisible], à la place du morceau seulement. Ne le devine pas.
 - Ignore l'interface autour du fichier : navigateur, menus, explorateur, numéros de ligne, minimap, autres onglets. Sers-t'en seulement pour lire le nom du fichier ouvert.
 - N'ajoute pas un fichier qui n'est pas visible.

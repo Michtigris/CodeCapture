@@ -2,6 +2,25 @@ export const INSERT_MARK = "/:/:";
 export const INSERT_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 export const INSERT_DAY_MS = 24 * 60 * 60 * 1000;
 
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+};
+
+export function decodeCodeEntities(value: string): string {
+  return value.replace(/&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z]+);/g, (all, body: string) => {
+    if (body.charCodeAt(0) !== 35) return NAMED_ENTITIES[body] ?? all;
+    const hex = body.charCodeAt(1) === 120 || body.charCodeAt(1) === 88;
+    const code = Number.parseInt(body.slice(hex ? 2 : 1), hex ? 16 : 10);
+    if (!Number.isFinite(code) || code < 0 || code > 0x10ffff) return all;
+    return String.fromCodePoint(code);
+  });
+}
+
 export function cleanInsertName(name: string): string | null {
   const filename = name.trim().replace(/\\/g, "/").replace(/\.\./g, "").replace(/^\/+/, "");
   if (!filename || filename.length > 180 || /[\r\n]/.test(filename)) return null;
@@ -25,7 +44,7 @@ export function parseInsert(raw: string): { filename: string; content: string }[
     else if (content.startsWith("\n")) content = content.slice(1);
     if (content.endsWith("\r\n")) content = content.slice(0, -2);
     else if (content.endsWith("\n")) content = content.slice(0, -1);
-    files.push({ filename, content });
+    files.push({ filename, content: decodeCodeEntities(content) });
   }
   return files;
 }

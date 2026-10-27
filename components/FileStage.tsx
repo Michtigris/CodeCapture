@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { fileStamp, INSERT_WEEK_MS } from "@/lib/insert";
+import { decodeCodeEntities, fileStamp, INSERT_WEEK_MS } from "@/lib/insert";
 import { folderLabel, splitPath } from "@/lib/paths";
 import type { CaptureDTO, ExtractedFile, PhotoDTO } from "@/lib/types";
 import { copyText, downloadText } from "./copy";
@@ -195,7 +195,7 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
   }
 
   async function copyFile(file: ExtractedFile) {
-    await copyText(file.content);
+    await copyText(decodeCodeEntities(file.content));
     onToast(`${tabLabel(file.filename)} copié`);
   }
 
@@ -205,7 +205,7 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
       onToast("Aucun code à copier.");
       return;
     }
-    const text = source.map((file) => `// ${file.filename}\n${file.content}`).join("\n\n");
+    const text = source.map((file) => `// ${file.filename}\n${decodeCodeEntities(file.content)}`).join("\n\n");
     await copyText(text);
     onToast("Tout le code est copié");
     setMenu(false);
@@ -492,13 +492,13 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
           <div className="sheet-bar">
             <strong>{current.filename}</strong>
             <span>
-              {current.language} · {current.content.split("\n").length} lignes
+              {current.language} · {decodeCodeEntities(current.content).split("\n").length} lignes
             </span>
             <div className="sheet-actions">
               <button type="button" onClick={() => void copyFile(current)}>
                 Copier tout
               </button>
-              <button type="button" onClick={() => downloadText(splitPath(current.filename).name, current.content)}>
+              <button type="button" onClick={() => downloadText(splitPath(current.filename).name, decodeCodeEntities(current.content))}>
                 Télécharger
               </button>
               <div className="dot-menu">
@@ -510,7 +510,7 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
                     <button
                       type="button"
                       onClick={() => {
-                        setDraft(current.content);
+                        setDraft(decodeCodeEntities(current.content));
                         setEditing(true);
                         setMenu(false);
                       }}
@@ -535,11 +535,11 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
           >
             <div className="code-row">
               <div className="gutter" aria-hidden="true">
-                {current.content.split("\n").map((_, index) => (
+                {decodeCodeEntities(current.content).split("\n").map((_, index) => (
                   <span key={index}>{index + 1}</span>
                 ))}
               </div>
-              <pre className="code">{current.content}</pre>
+              <pre className="code">{decodeCodeEntities(current.content)}</pre>
             </div>
           </div>
           {capture?.notes ? (

@@ -1,4 +1,5 @@
 import { PHOTO_BATCH } from "./constants";
+import { decodeCodeEntities } from "./insert";
 import type { ExtractedFile } from "./types";
 
 const SYSTEM = `Tu es l'agent CodeCapture. On te donne des photos prises à intervalle régulier devant un écran, une feuille ou un tableau. Ton seul travail : reconstituer les fichiers de code visibles, prêts à copier-coller.
@@ -9,7 +10,7 @@ Règles :
 - Plusieurs photos du même fichier : fusionne-les en une seule version complète, dans l'ordre de lecture (haut du fichier, puis la suite).
 - Recopie le code tel qu'il est écrit. N'invente pas de fonctions, d'imports ou de lignes absentes.
 - Si un morceau est illisible, laisse un commentaire dans le langage du fichier : [illisible]
-- Le champ content est le fichier brut, sans balises markdown et sans backticks.
+- Le champ content est le fichier brut, sans balises markdown, sans backticks et sans entités HTML. Un espace s'écrit espace, jamais &#x20; ni &nbsp;.
 - Si aucun code n'est lisible, renvoie files vide et explique pourquoi dans notes.
 - Réponds uniquement avec un objet JSON.
 
@@ -201,6 +202,7 @@ function sanitizeFile(raw: unknown): ExtractedFile | null {
   const rawContent = record.content ?? record.code ?? "";
   let content = typeof rawContent === "string" ? rawContent : String(rawContent);
   content = content.replace(/\0/g, "").replace(/\r\n/g, "\n").replace(/^```[a-zA-Z0-9]*\n/, "").replace(/\n```$/, "");
+  content = decodeCodeEntities(content);
   if (!content.trim()) return null;
   if (content.length > 200000) content = content.slice(0, 200000);
   const language = String(record.language || languageFromName(filename)).slice(0, 40);
