@@ -7,6 +7,67 @@ export async function fileToJpeg(file: File): Promise<Blob> {
   }
 }
 
+export function frameMatchingView(video: HTMLVideoElement, finder: HTMLElement): Promise<Blob> {
+  const region = visibleSource(video, finder);
+  if (!region) return frameFromVideo(video);
+  const transform = video.style.transform || getComputedStyle(video).transform;
+  const mirror = transform.includes("scaleX(-1)") || transform.startsWith("matrix(-1");
+  return drawJpeg(
+    Math.round(region.sw),
+    Math.round(region.sh),
+    (ctx, width, height) => {
+      if (mirror) {
+        ctx.translate(width, 0);
+        ctx.scale(-1, 1);
+      }
+      ctx.drawImage(video, region.sx, region.sy, region.sw, region.sh, 0, 0, width, height);
+    },
+    1800,
+    0.86,
+  );
+}
+
+function visibleSource(video: HTMLVideoElement, finder: HTMLElement) {
+  const frame = finder.getBoundingClientRect();
+  const box = video.getBoundingClientRect();
+  const sourceWidth = video.videoWidth;
+  const sourceHeight = video.videoHeight;
+  if (!frame.width || !frame.height || !box.width || !box.height || !sourceWidth || !sourceHeight) return null;
+  const left = Math.max(frame.left, box.left);
+  const top = Math.max(frame.top, box.top);
+  const right = Math.min(frame.right, box.right);
+  const bottom = Math.min(frame.bottom, box.bottom);
+  const viewWidth = right - left;
+  const viewHeight = bottom - top;
+  if (viewWidth < 2 || viewHeight < 2) return null;
+
+  const fit = getComputedStyle(video).objectFit;
+  let scaleX = box.width / sourceWidth;
+  let scaleY = box.height / sourceHeight;
+  let originX = 0;
+  let originY = 0;
+  if (fit === "cover" || fit === "contain") {
+    const scale =
+      fit === "cover"
+        ? Math.max(box.width / sourceWidth, box.height / sourceHeight)
+        : Math.min(box.width / sourceWidth, box.height / sourceHeight);
+    scaleX = scale;
+    scaleY = scale;
+    originX = (box.width - sourceWidth * scale) / 2;
+    originY = (box.height - sourceHeight * scale) / 2;
+  }
+
+  const sx = (left - box.left - originX) / scaleX;
+  const sy = (top - box.top - originY) / scaleY;
+  const sw = viewWidth / scaleX;
+  const sh = viewHeight / scaleY;
+  const x = Math.max(0, Math.min(sourceWidth - 1, sx));
+  const y = Math.max(0, Math.min(sourceHeight - 1, sy));
+  const w = Math.max(1, Math.min(sourceWidth - x, sw));
+  const h = Math.max(1, Math.min(sourceHeight - y, sh));
+  return { sx: x, sy: y, sw: w, sh: h };
+}
+
 export function frameFromVideo(
   video: HTMLVideoElement,
   crop?: { x: number; y: number; w: number; h: number },

@@ -5,7 +5,7 @@ import { INTERVALS } from "@/lib/constants";
 import type { CameraDTO } from "@/lib/types";
 import { deviceId, readCameraChoice, readPcCameras, writeCameraChoice, writePcCameras, type PcCamera } from "./device";
 import { formatRemain } from "./format";
-import { fileToJpeg, frameFromVideo } from "./images";
+import { fileToJpeg, frameFromVideo, frameMatchingView } from "./images";
 import { clampZoom, detectTarget, frameAtZoom, frameOnTarget, FULL, placeVideo, smoothLock, type NormRect } from "./targetLock";
 import { TipButton } from "./TipButton";
 
@@ -175,11 +175,13 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
 
   async function shoot() {
     const video = videoRef.current;
+    const finder = finderRef.current;
     if (!video) throw new Error("La caméra n'est pas prête.");
     if (!video.videoWidth) await waitForFrame(video);
     setFlash(true);
     window.setTimeout(() => setFlash(false), 140);
-    const blob = await frameFromVideo(video, cropRef.current);
+    const blob =
+      !wideRef.current && finder ? await frameMatchingView(video, finder) : await frameFromVideo(video, cropRef.current);
     await onCaptureRef.current(blob);
   }
   shootRef.current = shoot;
