@@ -30,7 +30,7 @@ export const CHAT_PROMPT = `Tu reçois des photos prises dans l'ordre chronologi
 
 Comment lire les photos :
 - Chaque photo continue la précédente. Lis-les du haut vers le bas, dans l'ordre où elles sont données.
-- Le nom du fichier est celui qui est affiché : onglet, titre ou chemin, dossiers inclus. Exemple : B2/POO/Animal.php. Ne raccourcis pas le chemin et n'invente pas un nom.
+- Le nom du fichier est seulement le nom affiché sur l'onglet, sans dossier et sans chemin. Exemple : coucou.php. Si l'écran montre /home/coucou.php ou B2/POO/Animal.php, tu ne gardes que coucou.php ou Animal.php. N'écris jamais un chemin qui indique d'où vient le fichier.
 - Plusieurs photos du même fichier deviennent un seul fichier. Fusionne-les du haut du fichier vers la suite. Ne recommence pas le fichier à chaque photo.
 - Recopie ce qui est lisible tel quel : indentation, lignes vides, commentaires. N'embellis pas une ligne que tu vois clairement.
 - Écris les espaces, tabulations et signes < > & tels quels. N'utilise aucune entité HTML : pas de &#x20;, &nbsp;, &lt; ou &amp;.
@@ -42,17 +42,17 @@ Comment lire les photos :
 
 Comment répondre :
 - Réponds par un seul bloc de texte. Pas de phrase avant, pas de phrase après, pas de titre, pas de liste, pas de plusieurs zones à copier, pas de balises markdown.
-- Chaque fichier commence par /:/: puis son chemin complet, puis /:/:, puis son contenu.
+- Chaque fichier commence par /:/: puis uniquement son nom de fichier, puis /:/:, puis son contenu. Pas de dossier, pas de /home/, pas de chemin.
 - Le contenu va jusqu'au prochain /:/: , ou jusqu'à la fin s'il n'y a plus de fichier.
-- S'il y a un autre fichier, enchaîne tout de suite avec /:/: puis son chemin, puis /:/:, puis son contenu.
-- La suite de caractères /:/: ne sert qu'à ouvrir un chemin et à le fermer. Ne l'écris nulle part dans le code.
+- S'il y a un autre fichier, enchaîne tout de suite avec /:/: puis son nom de fichier seul, puis /:/:, puis son contenu.
+- La suite de caractères /:/: ne sert qu'à ouvrir un nom de fichier et à le fermer. Ne l'écris nulle part dans le code.
 - Il y a toujours au moins un fichier.
 
 Forme exacte, ici avec deux fichiers :
-/:/:B2/POO/Animal.php/:/:
+/:/:Animal.php/:/:
 <?php
 class Animal {}
-/:/:B2/POO/index.html/:/:
+/:/:index.html/:/:
 <h1>Bonjour</h1>`;
 
 export function isInterval(sec: number): boolean {
