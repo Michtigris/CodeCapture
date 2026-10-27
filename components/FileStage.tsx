@@ -6,6 +6,7 @@ import { folderLabel, splitPath } from "@/lib/paths";
 import type { CaptureDTO, ExtractedFile, PhotoDTO } from "@/lib/types";
 import { copyText, downloadText } from "./copy";
 import { formatWhen } from "./format";
+import { presentCode } from "./presentCode";
 
 const EMPTY_FILES: ExtractedFile[] = [];
 const CAPTURE_TAB = "__capture";
@@ -161,6 +162,25 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
     if (onPad) padRef.current?.focus();
   }, [tab, onPad]);
 
+  const fileName = current?.filename ?? "";
+  const fileContent = current?.content ?? "";
+  const decodedContent = fileContent ? decodeCodeEntities(fileContent) : "";
+  const [styled, setStyled] = useState<{ key: string; text: string; html: string } | null>(null);
+  useEffect(() => {
+    if (!fileContent) return;
+    const key = `${fileName}\0${fileContent}`;
+    let cancel = false;
+    void presentCode(fileName, fileContent).then((result) => {
+      if (!cancel) setStyled({ key, ...result });
+    });
+    return () => {
+      cancel = true;
+    };
+  }, [fileName, fileContent]);
+  const styledReady = styled?.key === `${fileName}\0${fileContent}`;
+  const shown = styledReady && styled ? styled.text : decodedContent;
+  const shownHtml = styledReady && styled ? styled.html : "";
+
   const seenFocus = useRef(0);
   useEffect(() => {
     if (!focusFile || seenFocus.current === focusFile.nonce) return;
@@ -195,7 +215,8 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
   }
 
   async function copyFile(file: ExtractedFile) {
-    await copyText(decodeCodeEntities(file.content));
+    const { text } = await presentCode(file.filename, file.content);
+    await copyText(text);
     onToast(`${tabLabel(file.filename)} copié`);
   }
 
@@ -205,8 +226,10 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
       onToast("Aucun code à copier.");
       return;
     }
-    const text = source.map((file) => `// ${file.filename}\n${decodeCodeEntities(file.content)}`).join("\n\n");
-    await copyText(text);
+    const parts = await Promise.all(
+      source.map(async (file) => `// ${file.filename}\n${(await presentCode(file.filename, file.content)).text}`),
+    );
+    await copyText(parts.join("\n\n"));
     onToast("Tout le code est copié");
     setMenu(false);
   }
@@ -492,13 +515,20 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
           <div className="sheet-bar">
             <strong>{current.filename}</strong>
             <span>
-              {current.language} · {decodeCodeEntities(current.content).split("\n").length} lignes
+              {current.language} · {shown.split("\n").length} lignes
             </span>
             <div className="sheet-actions">
               <button type="button" onClick={() => void copyFile(current)}>
                 Copier tout
               </button>
-              <button type="button" onClick={() => downloadText(splitPath(current.filename).name, decodeCodeEntities(current.content))}>
+              <button
+                type="button"
+                onClick={() => {
+                  void presentCode(current.filename, current.content).then(({ text }) => {
+                    downloadText(splitPath(current.filename).name, text);
+                  });
+                }}
+              >
                 Télécharger
               </button>
               <div className="dot-menu">
@@ -510,9 +540,11 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
                     <button
                       type="button"
                       onClick={() => {
-                        setDraft(decodeCodeEntities(current.content));
-                        setEditing(true);
-                        setMenu(false);
+                        void presentCode(current.filename, current.content).then(({ text }) => {
+                          setDraft(text);
+                          setEditing(true);
+                          setMenu(false);
+                        });
                       }}
                     >
                       Modifier
@@ -535,11 +567,15 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
           >
             <div className="code-row">
               <div className="gutter" aria-hidden="true">
-                {decodeCodeEntities(current.content).split("\n").map((_, index) => (
+                {shown.split("\n").map((_, index) => (
                   <span key={index}>{index + 1}</span>
                 ))}
               </div>
-              <pre className="code">{decodeCodeEntities(current.content)}</pre>
+              {shownHtml ? (
+                <pre className="code" dangerouslySetInnerHTML={{ __html: shownHtml }} />
+              ) : (
+                <pre className="code">{shown}</pre>
+              )}
             </div>
           </div>
           {capture?.notes ? (

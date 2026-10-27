@@ -12,13 +12,19 @@ const NAMED_ENTITIES: Record<string, string> = {
 };
 
 export function decodeCodeEntities(value: string): string {
-  return value.replace(/&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z]+);/g, (all, body: string) => {
-    if (body.charCodeAt(0) !== 35) return NAMED_ENTITIES[body] ?? all;
-    const hex = body.charCodeAt(1) === 120 || body.charCodeAt(1) === 88;
-    const code = Number.parseInt(body.slice(hex ? 2 : 1), hex ? 16 : 10);
-    if (!Number.isFinite(code) || code < 0 || code > 0x10ffff) return all;
-    return String.fromCodePoint(code);
-  });
+  let current = value;
+  for (let pass = 0; pass < 5; pass += 1) {
+    const next = current.replace(/&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z]+);/g, (all, body: string) => {
+      if (body.charCodeAt(0) !== 35) return NAMED_ENTITIES[body] ?? all;
+      const hex = body.charCodeAt(1) === 120 || body.charCodeAt(1) === 88;
+      const code = Number.parseInt(body.slice(hex ? 2 : 1), hex ? 16 : 10);
+      if (!Number.isFinite(code) || code < 0 || code > 0x10ffff) return all;
+      return String.fromCodePoint(code);
+    });
+    if (next === current) return current;
+    current = next;
+  }
+  return current;
 }
 
 export function cleanInsertName(name: string): string | null {
