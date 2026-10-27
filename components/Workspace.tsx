@@ -48,7 +48,6 @@ export function Workspace({ groupId }: { groupId: string }) {
   const [missing, setMissing] = useState(false);
   const [panel, setPanel] = useState<"camera" | "photos" | "fichiers">("camera");
   const [name, setName] = useState("");
-  const [includeSent, setIncludeSent] = useState(false);
   const [sending, setSending] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
   const [followLatest, setFollowLatest] = useState(true);
@@ -319,7 +318,7 @@ export function Workspace({ groupId }: { groupId: string }) {
     setPacking(true);
     setBanner(null);
     try {
-      const res = await fetch(`/api/groups/${groupId}/packet${includeSent ? "?all=1" : ""}`);
+      const res = await fetch(`/api/groups/${groupId}/packet`);
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
         setBanner(payload.error || "PDF impossible.");
@@ -347,7 +346,7 @@ export function Workspace({ groupId }: { groupId: string }) {
   function targetCount() {
     if (!data) return 0;
     const waiting = data.photos.filter((photo) => !photo.captureId).length;
-    return Math.min(includeSent ? data.photos.length : waiting, MAX_PHOTOS_PER_SEND);
+    return Math.min(waiting, MAX_PHOTOS_PER_SEND);
   }
 
   async function importReply() {
@@ -390,7 +389,7 @@ export function Workspace({ groupId }: { groupId: string }) {
       const res = await fetch(`/api/groups/${groupId}/extract`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ all: includeSent }),
+        body: JSON.stringify({ all: false }),
       });
       const payload = await res.json().catch(() => ({}));
       if (res.status === 401) {
@@ -437,7 +436,7 @@ export function Workspace({ groupId }: { groupId: string }) {
   }
 
   const pending = data.photos.filter((photo) => !photo.captureId).length;
-  const target = Math.min(includeSent ? data.photos.length : pending, MAX_PHOTOS_PER_SEND);
+  const target = Math.min(pending, MAX_PHOTOS_PER_SEND);
   const needsKey = me ? !me.hasOpenAIKey : false;
   function flashDot(state: "ok" | "bad" | "same", ms: number) {
     window.clearTimeout(dotTimer.current);
@@ -568,21 +567,7 @@ export function Workspace({ groupId }: { groupId: string }) {
               </button>
             </div>
           ) : null}
-          {data.photos.some((photo) => photo.captureId) ? (
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={includeSent}
-                onChange={(event) => setIncludeSent(event.target.checked)}
-              />
-              Inclure les photos déjà envoyées
-            </label>
-          ) : null}
-          <p className="group-stats">
-            {pending} dans le lot
-            {data.photos.length - pending > 0 ? ` · ${data.photos.length - pending} en historique` : ""}
-            {data.captures[0] ? ` · dernière extraction ${formatWhen(data.captures[0].createdAt)}` : ""}
-          </p>
+          <p className="group-stats">{pending} dans le lot</p>
           <TipButton label="Copier le prompt à coller avec les photos" className="ghost prompt-copy" onClick={() => void copyPrompt()}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <rect x="8" y="3" width="8" height="4" rx="1" />
@@ -626,7 +611,7 @@ export function Workspace({ groupId }: { groupId: string }) {
         </div>
       </div>
       {banner ? <p className="banner">{banner}</p> : null}
-      {!includeSent && pending > MAX_PHOTOS_PER_SEND ? (
+      {pending > MAX_PHOTOS_PER_SEND ? (
         <p className="hint" style={{ padding: "8px 16px 0" }}>
           Les {MAX_PHOTOS_PER_SEND} plus anciennes partent maintenant. Relance ensuite pour la suite.
         </p>
