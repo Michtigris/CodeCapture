@@ -67,6 +67,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   const wideRef = useRef(false);
   const readyRef = useRef(false);
   const runningRef = useRef(false);
+  const nextAtRef = useRef<number | null>(null);
   const facingRef = useRef(facing);
   const enableRef = useRef(enableCamera);
 
@@ -74,6 +75,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   onToastRef.current = onToast;
   readyRef.current = ready;
   runningRef.current = running;
+  nextAtRef.current = nextAt;
   facingRef.current = facing;
   enableRef.current = enableCamera;
   followRef.current = follow;
@@ -149,11 +151,12 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     };
   }, [running]);
 
+  const remoteLive = cameras.some((camera) => camera.running && (camera.nextAt ?? 0) > 0);
   useEffect(() => {
-    if (!running) return;
+    if (!running && !remoteLive) return;
     const clock = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(clock);
-  }, [running]);
+  }, [running, remoteLive]);
 
   useEffect(() => {
     if (!pending) return;
@@ -344,6 +347,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
             intervalSec: ownInterval,
             givenName: media.matches ? ownerName : "",
             ack: ackRef.current || undefined,
+            nextAt: runningRef.current && nextAtRef.current ? nextAtRef.current : 0,
           }),
         });
         if (!res.ok || stop) return;
@@ -674,7 +678,8 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
         <div className="source-box">
           {usingDesk ? null : (
             <button type="button" className="pc-add" onClick={() => chooseSource("pc:chrome")}>
-              Caméra de ce PC
+              <span>Caméra de ce PC</span>
+              {running && remain ? <span className="source-remain">{remain}</span> : null}
             </button>
           )}
           <div className="phone-stage sources">
@@ -704,7 +709,10 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
                     onClick={() => chooseSource(camera.deviceId)}
                   >
                     <span>{camera.label}</span>
-                    <span>{camera.camera ? "Caméra allumée" : "Connecté"}</span>
+                    <span className="source-state">{camera.camera ? "Caméra allumée" : "Connecté"}</span>
+                    {camera.running && camera.nextAt && camera.nextAt > now ? (
+                      <span className="source-remain">{formatRemain(camera.nextAt - now)}</span>
+                    ) : null}
                   </button>
                 </li>
               ))}

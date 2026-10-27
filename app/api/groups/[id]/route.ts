@@ -60,6 +60,7 @@ export async function GET(_request: Request, ctx: Ctx) {
       intervalSec: camera.intervalSec || group.intervalSec,
       label: camera.label || (camera.phone !== false ? "Téléphone" : "Ordinateur"),
       ack: camera.ack || 0,
+      nextAt: camera.nextAt && camera.nextAt > Date.now() ? camera.nextAt : 0,
     })),
   });
 }

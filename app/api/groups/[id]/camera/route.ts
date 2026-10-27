@@ -26,6 +26,7 @@ function present(cameras: Awaited<ReturnType<typeof listLiveCameras>>, fallbackI
     intervalSec: camera.intervalSec || fallbackInterval,
     label: camera.label || (camera.phone !== false ? "Téléphone" : "Ordinateur"),
     ack: camera.ack || 0,
+    nextAt: camera.nextAt && camera.nextAt > Date.now() ? camera.nextAt : 0,
   }));
 }
 
@@ -72,6 +73,7 @@ export async function POST(request: Request, ctx: Ctx) {
     intervalSec: isInterval(intervalSec) ? intervalSec : undefined,
     givenName: givenName || undefined,
     ack: Number(body?.ack) > 0 ? Number(body.ack) : undefined,
+    nextAt: Number(body?.nextAt) > Date.now() ? Number(body.nextAt) : 0,
   });
   const cameras = await listLiveCameras(id);
   return json({

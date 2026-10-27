@@ -496,16 +496,28 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
   flex-direction: column;
 }
 .phone-stage.sources { height: auto; max-height: 240px; min-height: 72px; margin: 0; }
-.source-box { margin: 0 12px; display: grid; justify-items: start; gap: 8px; }
+.source-box { margin: 0 12px; display: grid; justify-items: stretch; gap: 8px; }
 .pc-add {
-  width: auto;
-  padding: 6px 10px;
-  font-size: 13px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 12px;
+  font-size: 16px;
   line-height: 1.2;
-  background: transparent;
+  text-align: left;
+  background: var(--bg-3);
   border: 1px solid var(--line);
   color: var(--text);
 }
+.source-remain {
+  color: var(--lime);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+}
+.pc-add .source-remain { margin-left: auto; }
+.phone-stage li button span.source-state { margin-left: auto; color: var(--muted); font-size: 13px; }
 .pc-add:hover { border-color: var(--lime); color: var(--lime); }
 .source-row { display: flex; align-items: stretch; border-bottom: 1px solid var(--line); }
 .phone-stage .source-row > button:first-child { flex: 1; width: auto; min-width: 0; border-bottom: none; }

@@ -73,6 +73,7 @@ export type CameraRecord = {
   label: string;
   command?: CameraCommand | null;
   ack?: number;
+  nextAt?: number;
 };
 
 export type CameraCommand = {
@@ -464,6 +465,7 @@ type LiveDevice = {
   intervalSec?: number;
   label?: string;
   ack?: number;
+  nextAt?: number;
 };
 
 type LiveState = {
@@ -511,6 +513,7 @@ function freshCameras(groupId: string, devices: LiveDevice[], maxAge: number): C
       intervalSec: item.intervalSec || 0,
       label: item.label || "",
       ack: item.ack,
+      nextAt: item.nextAt && item.nextAt > Date.now() ? item.nextAt : undefined,
     }));
 }
 
@@ -554,7 +557,7 @@ export async function touchCamera(
   groupId: string,
   deviceId: string,
   phone: boolean,
-  status?: { camera?: boolean; running?: boolean; intervalSec?: number; givenName?: string; ack?: number },
+  status?: { camera?: boolean; running?: boolean; intervalSec?: number; givenName?: string; ack?: number; nextAt?: number },
 ): Promise<{ command: CameraCommand | null; watch: boolean }> {
   if (storageMode() === "file") {
     let command: CameraCommand | null = null;
@@ -570,6 +573,7 @@ export async function touchCamera(
         if (status?.running !== undefined) current.running = status.running;
         if (status?.intervalSec) current.intervalSec = status.intervalSec;
         if (status?.ack) current.ack = status.ack;
+        current.nextAt = status?.running === false || !status?.nextAt ? undefined : status.nextAt;
         if (phone && (status?.givenName || !current.label)) {
           current.label = phoneLabel(
             db.cameras
@@ -589,6 +593,7 @@ export async function touchCamera(
           running: status?.running === true,
           intervalSec: status?.intervalSec || 0,
           label: phone ? phoneLabel([], deviceId, status?.givenName) : "",
+          nextAt: status?.running === false || !status?.nextAt ? undefined : status.nextAt,
         };
         db.cameras.push(current);
       }
@@ -623,6 +628,7 @@ export async function touchCamera(
     (current.intervalSec || 0) !== nextInterval ||
     (current.label || "") !== nextLabel ||
     (status?.ack ? current.ack !== status.ack : false) ||
+    (current.nextAt || 0) !== (status?.nextAt || 0) ||
     now - Date.parse(previousSeen) > 20_000;
   if (!current) {
     current = { id: deviceId, seenAt, phone, label: nextLabel };
@@ -634,6 +640,7 @@ export async function touchCamera(
   current.running = nextRunning;
   current.intervalSec = nextInterval;
   current.label = nextLabel;
+  current.nextAt = nextRunning === false || !status?.nextAt ? undefined : status.nextAt;
   if (status?.ack) current.ack = status.ack;
   if (changed) await writeLive(groupId, { ...state, command: null, watch: null, seq: state.seq });
   const control = await readControl(groupId);
@@ -700,6 +707,7 @@ export async function listLiveCameras(groupId: string): Promise<CameraRecord[]> 
       intervalSec: item.intervalSec || 0,
       label: item.label || "",
       ack: item.ack,
+      nextAt: item.nextAt,
     })), 45_000));
   }
   return freshCameras(groupId, (await readLive(groupId)).devices, 45_000);
