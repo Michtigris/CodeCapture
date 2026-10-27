@@ -559,22 +559,7 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
         ) : null}
         </div>
       </div>
-      {showFolders ? (
-        <TabStrip label="Dossiers">
-          {folders.map((item) => (
-            <TabChip
-              key={item || "racine"}
-              label={folderLabel(item)}
-              selected={item === activeFolder}
-              kind="folder"
-              onOpen={() => chooseFolder(item)}
-              onDouble={(anchor) => openFolderMenu(item, anchor)}
-              onArchive={canArchive ? () => askArchiveFolder(item) : undefined}
-            />
-          ))}
-        </TabStrip>
-      ) : null}
-      <TabStrip label="Fichiers">
+      <TabStrip label="Dossiers">
         <button
           type="button"
           className={onCaptureTab ? "capture-link on" : "capture-link"}
@@ -586,6 +571,21 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
         >
           Dernière capture
         </button>
+        {showFolders
+          ? folders.map((item) => (
+              <TabChip
+                key={item || "racine"}
+                label={folderLabel(item)}
+                selected={item === activeFolder}
+                kind="folder"
+                onOpen={() => chooseFolder(item)}
+                onDouble={(anchor) => openFolderMenu(item, anchor)}
+                onArchive={canArchive ? () => askArchiveFolder(item) : undefined}
+              />
+            ))
+          : null}
+      </TabStrip>
+      <TabStrip label="Fichiers">
         {visible.map((row) => (
           <TabChip
             key={row.file.filename}
