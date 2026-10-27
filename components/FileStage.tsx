@@ -2,11 +2,12 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { decodeCodeEntities, fileStamp, INSERT_WEEK_MS } from "@/lib/insert";
-import { folderLabel, splitPath } from "@/lib/paths";
+import { folderLabel, normalizeFolder, splitPath } from "@/lib/paths";
 import type { CaptureDTO, ExtractedFile, PhotoDTO } from "@/lib/types";
 import { copyText, downloadText } from "./copy";
 import { formatWhen } from "./format";
 import { presentCode } from "./presentCode";
+import { downloadBlob, zipFolder } from "./zip";
 
 const EMPTY_FILES: ExtractedFile[] = [];
 const CAPTURE_TAB = "__capture";
@@ -96,6 +97,7 @@ function TabChip({
   selected,
   kind,
   onOpen,
+  onDouble,
   onArchive,
 }: {
   label: string;
@@ -103,11 +105,20 @@ function TabChip({
   selected: boolean;
   kind?: "folder" | "pad";
   onOpen: () => void;
+  onDouble?: (anchor: HTMLElement) => void;
   onArchive?: () => void;
 }) {
   return (
     <div className={["tab-slot", kind ?? "", selected ? "on" : ""].filter(Boolean).join(" ")}>
-      <button type="button" role="tab" className="tab" title={title} aria-selected={selected} onClick={onOpen}>
+      <button
+        type="button"
+        role="tab"
+        className="tab"
+        title={title}
+        aria-selected={selected}
+        onClick={onOpen}
+        onDoubleClick={(event) => onDouble?.(event.currentTarget)}
+      >
         {label}
       </button>
       {onArchive ? (
@@ -128,11 +139,12 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
     for (const item of captures) {
       for (const file of item.files) {
         if (file.archivedAt) continue;
+        const path = splitPath(file.filename);
         rows.push({
           file,
           captureId: item.id,
           at: fileStamp(file.updatedAt, item.createdAt),
-          ...splitPath(file.filename),
+          folder: normalizeFolder(path.folder),
         });
       }
     }
@@ -226,6 +238,24 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
   const shown = styledReady && styled ? styled.text : decodedContent;
   const shownHtml = styledReady && styled ? styled.html : "";
 
+  const [folderMenu, setFolderMenu] = useState<{ folder: string; x: number; y: number } | null>(null);
+  useEffect(() => {
+    if (!folderMenu) return;
+    function close(event: PointerEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest(".folder-menu")) return;
+      setFolderMenu(null);
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setFolderMenu(null);
+    }
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [folderMenu]);
   const undos = useRef<Undo[]>([]);
   const restoreRef = useRef(onRestore);
   restoreRef.current = onRestore;
@@ -294,6 +324,40 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
       onToast(error instanceof Error ? error.message : "Archivage impossible.");
       return false;
     }
+  }
+
+  function openFolderMenu(folderName: string, anchor: HTMLElement) {
+    const box = anchor.getBoundingClientRect();
+    setFolderMenu({ folder: folderName, x: box.left, y: box.bottom + 4 });
+  }
+
+  async function downloadFolder(folderName: string) {
+    const rows = [...placed.open, ...placed.history].filter((row) => row.folder === folderName);
+    setFolderMenu(null);
+    if (!rows.length) {
+      onToast("Ce dossier est vide.");
+      return;
+    }
+    const used = new Set<string>();
+    const packed: { name: string; text: string }[] = [];
+    for (const row of rows) {
+      const { text } = await presentCode(row.file.filename, row.file.content);
+      const base = splitPath(row.file.filename).name || "fichier.txt";
+      let name = base;
+      const dot = base.lastIndexOf(".");
+      const stem = dot > 0 ? base.slice(0, dot) : base;
+      const ext = dot > 0 ? base.slice(dot) : "";
+      let count = 2;
+      while (used.has(name)) {
+        name = `${stem}-${count}${ext}`;
+        count += 1;
+      }
+      used.add(name);
+      packed.push({ name, text });
+    }
+    const label = folderLabel(folderName).replace(/[<>:"/\\|?*]/g, "-");
+    downloadBlob(`${label}.zip`, zipFolder(label, packed));
+    onToast("Dossier téléchargé");
   }
 
   function filenamesIn(folderName: string) {
@@ -465,6 +529,7 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
               selected={item === activeFolder}
               kind="folder"
               onOpen={() => chooseFolder(item)}
+              onDouble={(anchor) => openFolderMenu(item, anchor)}
               onArchive={canArchive ? () => askArchiveFolder(item) : undefined}
             />
           ))}
@@ -716,6 +781,13 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
               <p>{capture.notes}</p>
             </details>
           ) : null}
+        </div>
+      ) : null}
+      {folderMenu ? (
+        <div className="folder-menu" style={{ left: folderMenu.x, top: folderMenu.y }} role="menu">
+          <button type="button" onClick={() => void downloadFolder(folderMenu.folder)}>
+            Télécharger
+          </button>
         </div>
       ) : null}
     </section>

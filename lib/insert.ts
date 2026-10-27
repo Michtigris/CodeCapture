@@ -1,3 +1,5 @@
+import { placeName } from "./paths";
+
 export const INSERT_MARK = "/:/:";
 export const INSERT_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 export const INSERT_DAY_MS = 24 * 60 * 60 * 1000;
@@ -53,7 +55,8 @@ export function parseInsert(raw: string): { filename: string; content: string }[
   if (parts.length < 2 || parts.length % 2 !== 0) return null;
   const files: { filename: string; content: string }[] = [];
   for (let index = 0; index < parts.length; index += 2) {
-    const filename = cleanInsertName(parts[index] ?? "");
+    const cleaned = cleanInsertName(parts[index] ?? "");
+    const filename = cleaned ? placeName(cleaned) : null;
     if (!filename) return null;
     let content = parts[index + 1] ?? "";
     if (content.startsWith("\r\n")) content = content.slice(2);

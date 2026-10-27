@@ -30,7 +30,11 @@ export const CHAT_PROMPT = `Tu reçois des photos prises dans l'ordre chronologi
 
 Comment lire les photos :
 - Chaque photo continue la précédente. Lis-les du haut vers le bas, dans l'ordre où elles sont données.
-- Le nom du fichier est seulement le nom affiché sur l'onglet, sans dossier et sans chemin. Exemple : coucou.php. Si l'écran montre /home/coucou.php ou B2/POO/Animal.php, tu ne gardes que coucou.php ou Animal.php. N'écris jamais un chemin qui indique d'où vient le fichier.
+- Le nom que tu écris est le fichier, précédé d'un seul dossier : Dossier/fichier.php. Tu ne recopies jamais un chemin d'ordinateur. /home/coucou.php ou C:\\cours\\coucou.php deviennent seulement coucou.php, puis tu choisis le dossier.
+- Le dossier, c'est toi qui le décides. Si plusieurs fichiers vont ensemble (un exercice, une classe et celles qui l'utilisent, une page et son style), ils partagent un dossier au nom court, pris sur ce que tu vois : 11-Les-exceptions/1-exception-simple.php.
+- Si tu ne sais pas dans quel dossier ranger le fichier, ou s'il n'a pas de dossier à lui, tu le mets dans DIVERS : DIVERS/Commerce.php.
+- Un fichier déjà écrit dans un dossier y reste. Les photos suivantes corrigent ce même fichier, au même chemin. Tu ne le déplaces pas, ni depuis DIVERS, ni depuis un autre dossier.
+- Exception : s'il était dans DIVERS et qu'une photo plus tardive montre qu'il a besoin d'un autre fichier, donc d'un vrai dossier, tu laisses DIVERS/Nom.php tel qu'il est, et tu crées un second fichier du même nom dans le nouveau dossier. Tu n'effaces pas la copie DIVERS.
 - Plusieurs photos du même fichier deviennent un seul fichier. Fusionne-les du haut du fichier vers la suite. Ne recommence pas le fichier à chaque photo.
 - Recopie ce qui est lisible tel quel : indentation, lignes vides, commentaires. N'embellis pas une ligne que tu vois clairement.
 - Écris les espaces, tabulations et signes < > & tels quels. N'utilise aucune entité HTML : pas de &#x20;, &nbsp;, &lt; ou &amp;.
@@ -43,18 +47,19 @@ Comment lire les photos :
 
 Comment répondre :
 - Réponds par un seul bloc de texte. Pas de phrase avant, pas de phrase après, pas de titre, pas de liste, pas de plusieurs zones à copier, pas de balises markdown.
-- Chaque fichier commence par /:/: puis uniquement son nom de fichier, puis /:/:, puis son contenu. Pas de dossier, pas de /home/, pas de chemin.
+- Chaque fichier commence par /:/: puis Dossier/nom.ext, puis /:/:, puis son contenu. Le dossier est celui que tu as choisi, ou DIVERS. Un seul niveau, jamais un chemin d'ordinateur.
 - Le contenu va jusqu'au prochain /:/: , ou jusqu'à la fin s'il n'y a plus de fichier.
-- S'il y a un autre fichier, enchaîne tout de suite avec /:/: puis son nom de fichier seul, puis /:/:, puis son contenu.
+- S'il y a un autre fichier, enchaîne tout de suite avec /:/: puis Dossier/nom.ext, puis /:/:, puis son contenu.
 - La suite de caractères /:/: ne sert qu'à ouvrir un nom de fichier et à le fermer. Ne l'écris nulle part dans le code.
 - Il y a toujours au moins un fichier.
 
 Forme exacte, ici avec deux fichiers :
-/:/:Animal.php/:/:
+/:/:DIVERS/Commerce.php/:/:
 <?php
-class Animal {}
-/:/:index.html/:/:
-<h1>Bonjour</h1>`;
+echo "ok";
+/:/:11-Les-exceptions/1-exception-simple.php/:/:
+<?php
+function diviser(int $a, int $b) { return $a / $b; }`;
 
 export function isInterval(sec: number): boolean {
   return INTERVALS.some((item) => item.sec === sec);

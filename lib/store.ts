@@ -4,6 +4,7 @@ import path from "path";
 import { DEFAULT_BRIEF, DEFAULT_INTERVAL, DEFAULT_MODEL, LEGACY_BRIEFS } from "./constants";
 import { chooseHistoryDrops } from "./history";
 import { cleanInsertName, fileStamp, INSERT_WEEK_MS } from "./insert";
+import { placeName, samePlace } from "./paths";
 import { r2Configured, r2Del, r2Get, r2Put, R2Error } from "./r2";
 import type { ExtractedFile } from "./types";
 import { mimeFor, type ImageExt } from "./sniff";
@@ -1024,20 +1025,22 @@ export function saveInsertedFiles(
     let focusCapture = "";
     let focusName = "";
     for (const item of incoming) {
-      const filename = cleanInsertName(item.filename);
-      if (!filename) throw new Error("Nom de fichier invalide.");
+      const rawName = cleanInsertName(item.filename);
+      if (!rawName) throw new Error("Nom de fichier invalide.");
+      const filename = placeName(rawName);
       const content = item.content.replace(/\0/g, "").slice(0, 200_000);
       const matches = db.captures
         .filter((capture) => capture.groupId === groupId)
         .flatMap((capture) =>
           capture.files
-            .filter((file) => file.filename === filename)
+            .filter((file) => samePlace(file.filename, filename))
             .map((file) => ({ capture, file })),
         )
         .sort((a, b) => fileStamp(b.file.updatedAt, b.capture.createdAt) - fileStamp(a.file.updatedAt, a.capture.createdAt));
       const open = matches.find((match) => nowMs - fileStamp(match.file.updatedAt, match.capture.createdAt) < INSERT_WEEK_MS);
       const target = open ?? matches[0];
       if (target) {
+        target.file.filename = filename;
         target.file.content = content;
         target.file.language = fileLanguage(filename);
         target.file.updatedAt = now;

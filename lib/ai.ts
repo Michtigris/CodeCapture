@@ -1,12 +1,14 @@
 import { PHOTO_BATCH } from "./constants";
 import { decodeCodeEntities } from "./insert";
+import { placeName } from "./paths";
 import type { ExtractedFile } from "./types";
 
 const SYSTEM = `Tu es l'agent CodeCapture. On te donne des photos prises à intervalle régulier devant un écran, une feuille ou un tableau. Ton seul travail : reconstituer les fichiers de code visibles, prêts à copier-coller.
 
 Règles :
-- Repère le nom affiché sur l'onglet.
-- filename est uniquement ce nom, sans dossier et sans chemin. /home/coucou.php devient coucou.php. N'indique jamais d'où vient le fichier.
+- Repère le nom affiché sur l'onglet. filename est Dossier/fichier.ext, un seul dossier. /home/coucou.php ou un chemin d'ordinateur devient seulement le nom du fichier, puis tu choisis le dossier.
+- Si plusieurs fichiers vont ensemble, ils partagent un dossier au nom court. Si tu ne sais pas où ranger un fichier, filename commence par DIVERS/.
+- Un fichier déjà reconstruit garde son dossier. Tu ne le déplaces pas. S'il était dans DIVERS et qu'il doit ensuite vivre avec un autre fichier, tu laisses DIVERS/Nom.ext tel quel et tu ajoutes un second fichier du même nom dans le nouveau dossier.
 - Plusieurs photos du même fichier : fusionne-les en une seule version complète, dans l'ordre de lecture (haut du fichier, puis la suite).
 - Recopie ce qui est lisible tel quel. N'embellis pas une ligne clairement visible.
 - N'écris jamais [illisible]. Si un morceau est coupé, flou ou absent, mets le code le plus probable pour que le fichier s'exécute. S'il manque le début et qu'une fonction est appelée sans être définie, ajoute <?php et crée cette fonction. Si une photo suivante montre le vrai texte, remplace ce que tu avais deviné.
@@ -15,7 +17,7 @@ Règles :
 - Réponds uniquement avec un objet JSON.
 
 Exemple :
-{"files":[{"filename":"animal.php","language":"php","content":"<?php\\nclass Animal {\\n}\\n"},{"filename":"chat.php","language":"php","content":"<?php\\nclass Chat extends Animal {\\n}\\n"}],"notes":"Deux classes PHP vues dans l'éditeur."}`;
+{"files":[{"filename":"DIVERS/commerce.php","language":"php","content":"<?php\\necho \\"ok\\";\\n"},{"filename":"11-Les-exceptions/diviser.php","language":"php","content":"<?php\\nfunction diviser(int $a, int $b) { return $a / $b; }\\n"}],"notes":"Un fichier sans dossier, et une fonction d'exercice."}`;
 
 type PhotoInput = {
   createdAt: string;
@@ -102,7 +104,7 @@ function priorText(files: ExtractedFile[]): string {
     }
     body += chunk;
   }
-  return `Fichiers déjà reconstruits. Si une nouvelle photo continue l'un d'eux, renvoie son contenu COMPLET, pas seulement le nouveau morceau.\n\n${body}`;
+  return `Fichiers déjà reconstruits. Si une nouvelle photo continue l'un d'eux, renvoie son contenu COMPLET, avec le même filename, dossier compris. Ne change pas son dossier. S'il est dans DIVERS et qu'il doit rejoindre un nouveau dossier, garde le fichier DIVERS et ajoute l'autre.\n\n${body}`;
 }
 
 async function complete(input: {
@@ -199,6 +201,7 @@ function sanitizeFile(raw: unknown): ExtractedFile | null {
   let filename = String(record.filename || record.name || record.path || "").trim();
   filename = filename.replace(/\\/g, "/").replace(/\.\./g, "").replace(/^\.?\//, "").replace(/^\/+/, "");
   if (!filename || filename.length > 180) return null;
+  filename = placeName(filename);
   const rawContent = record.content ?? record.code ?? "";
   let content = typeof rawContent === "string" ? rawContent : String(rawContent);
   content = content.replace(/\0/g, "").replace(/\r\n/g, "\n").replace(/^```[a-zA-Z0-9]*\n/, "").replace(/\n```$/, "");
