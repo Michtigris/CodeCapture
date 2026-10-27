@@ -385,6 +385,15 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
   flex-wrap: wrap;
 }
 .pane-head h2 { margin: 0; font-size: 18px; letter-spacing: -0.03em; }
+.head-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.capture-link {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.capture-link.on { color: var(--lime); border-color: var(--lime); }
 .cam-controls { display: grid; gap: 10px; padding: 12px; }
 .remain { margin: 0; font-family: var(--font-mono), monospace; color: var(--lime); }
 

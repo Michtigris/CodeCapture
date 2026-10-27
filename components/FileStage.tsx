@@ -73,7 +73,7 @@ function isNotepad(filename: string) {
 function tabLabel(filename: string) {
   const name = splitPath(filename).name;
   const numbered = name.match(/^(\d+)\.txt$/i);
-  return numbered ? numbered[1] : filename;
+  return numbered ? numbered[1] : name;
 }
 
 type Placed = {
@@ -107,16 +107,22 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
       seen.add(row.file.filename);
       unique.push(row);
     }
-    const open = unique.filter((row) => now - row.at < INSERT_WEEK_MS).sort((a, b) => a.at - b.at);
+    const open = unique.filter((row) => now - row.at < INSERT_WEEK_MS).sort((a, b) => b.at - a.at);
     const history = unique.filter((row) => now - row.at >= INSERT_WEEK_MS);
     return { open, history };
   }, [captures]);
-  const parsed = useMemo(() => files.map((file) => ({ ...file, ...splitPath(file.filename) })), [files]);
-  const folders = useMemo(() => [...new Set(parsed.map((file) => file.folder))], [parsed]);
-  const showFolders = folders.some((folder) => folder !== "");
+  const folders = useMemo(() => {
+    const latest = new Map<string, number>();
+    for (const row of placed.open) {
+      const prev = latest.get(row.folder) ?? 0;
+      if (row.at > prev) latest.set(row.folder, row.at);
+    }
+    return [...latest.entries()].sort((a, b) => b[1] - a[1]).map(([name]) => name);
+  }, [placed]);
+  const showFolders = folders.some((item) => item !== "");
   const captureKey = capture?.id ?? "";
   const [seen, setSeen] = useState(captureKey);
-  const [folder, setFolder] = useState(() => parsed[0]?.folder ?? "");
+  const [folder, setFolder] = useState<string | null>(null);
   const [tab, setTab] = useState(CAPTURE_TAB);
   const [menu, setMenu] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -135,16 +141,18 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
       pads.includes(tab);
     setSeen(captureKey);
     if (!stillThere) {
-      setFolder(parsed[0]?.folder ?? "");
+      setFolder(null);
       setTab(CAPTURE_TAB);
     }
     setEditing(false);
     setMenu(false);
   }
 
+  const activeFolder = folder !== null && folders.includes(folder) ? folder : (folders[0] ?? "");
   const savedNames = useMemo(() => new Set(captures.flatMap((item) => item.files.map((file) => file.filename))), [captures]);
   const openPads = pads.filter((name) => !savedNames.has(name));
-  const visible = placed.open;
+  const visible = showFolders ? placed.open.filter((row) => row.folder === activeFolder) : placed.open;
+  const historyHere = showFolders ? placed.history.filter((row) => row.folder === activeFolder) : placed.history;
   const located = visible.find((row) => row.file.filename === tab) ?? placed.history.find((row) => row.file.filename === tab) ?? null;
   const current = located?.file ?? null;
   const onCaptureTab = tab === CAPTURE_TAB;
@@ -198,8 +206,12 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
 
   function chooseFolder(next: string) {
     setFolder(next);
-    const first = parsed.find((file) => file.folder === next);
-    if (first) setTab(first.filename);
+    const first = placed.open.find((row) => row.folder === next);
+    if (!first) return;
+    onSelectCapture(first.captureId);
+    setTab(first.file.filename);
+    setEditing(false);
+    setMenu(false);
   }
 
   function openPad() {
@@ -304,6 +316,18 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
     <section className="pane pane-files">
       <div className="pane-head">
         <h2>Fichiers</h2>
+        <div className="head-actions">
+          <button
+            type="button"
+            className={onCaptureTab ? "capture-link on" : "capture-link"}
+            onClick={() => {
+              setTab(CAPTURE_TAB);
+              setMenu(false);
+              setEditing(false);
+            }}
+          >
+            Dernière capture
+          </button>
         {captures.length > 1 ? (
           <select
             className="history"
@@ -318,14 +342,15 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
             ))}
           </select>
         ) : null}
+        </div>
       </div>
-      {showFolders && !onCaptureTab && !onPad ? (
+      {showFolders ? (
         <div className="tabs" role="tablist" aria-label="Dossiers">
           {folders.map((item) => (
             <button
               key={item || "racine"}
               type="button"
-              className={item === folder ? "tab folder on" : "tab folder"}
+              className={item === activeFolder ? "tab folder on" : "tab folder"}
               onClick={() => chooseFolder(item)}
             >
               {folderLabel(item)}
@@ -334,18 +359,6 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
         </div>
       ) : null}
       <div className="tabs" role="tablist" aria-label="Fichiers">
-        <button
-          type="button"
-          role="tab"
-          className={onCaptureTab ? "tab on capture" : "tab"}
-          onClick={() => {
-            setTab(CAPTURE_TAB);
-            setMenu(false);
-            setEditing(false);
-          }}
-        >
-          Dernière capture
-        </button>
         {visible.map((row) => (
           <button
             key={row.file.filename}
@@ -384,12 +397,12 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
           +
         </button>
       </div>
-      {placed.history.length ? (
+      {historyHere.length ? (
         <details className="file-history">
-          <summary>Historique · {placed.history.length}</summary>
+          <summary>Historique · {historyHere.length}</summary>
           <p className="hint">Les onglets de plus de 7 jours.</p>
           <div className="tabs">
-            {placed.history.map((row) => (
+            {historyHere.map((row) => (
               <button
                 key={row.file.filename}
                 type="button"
@@ -503,7 +516,7 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
         </form>
       ) : current && editing ? (
         <form className="sheet add-file" onSubmit={(event) => void saveEdit(event)}>
-          <p className="hint">{current.filename}</p>
+          <p className="hint">{tabLabel(current.filename)}</p>
           <textarea value={draft} onChange={(event) => setDraft(event.target.value)} required />
           <div className="row">
             <button className="lime" type="submit">Enregistrer</button>
@@ -513,7 +526,7 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
       ) : current ? (
         <div className="sheet">
           <div className="sheet-bar">
-            <strong>{current.filename}</strong>
+            <strong>{tabLabel(current.filename)}</strong>
             <span>
               {current.language} · {shown.split("\n").length} lignes
             </span>

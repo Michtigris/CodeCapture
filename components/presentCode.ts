@@ -1,4 +1,4 @@
-import { decodeCodeEntities } from "@/lib/insert";
+import { decodeCodeEntities, stripLineEscapes } from "@/lib/insert";
 import hljs from "highlight.js/lib/core";
 import bash from "highlight.js/lib/languages/bash";
 import csharp from "highlight.js/lib/languages/csharp";
@@ -70,7 +70,7 @@ export async function presentCode(filename: string, content: string): Promise<{ 
   const key = `${filename}\0${content}`;
   const hit = cache.get(key);
   if (hit) return hit;
-  const decoded = decodeCodeEntities(content).replace(/\r\n/g, "\n");
+  const decoded = stripLineEscapes(decodeCodeEntities(content).replace(/\r\n/g, "\n"));
   const text = (await formatCode(filename, decoded)).replace(/\n$/, "");
   const html = highlightCode(filename, text);
   const result = { text, html };

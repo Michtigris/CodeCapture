@@ -34,6 +34,7 @@ Comment lire les photos :
 - Plusieurs photos du même fichier deviennent un seul fichier. Fusionne-les du haut du fichier vers la suite. Ne recommence pas le fichier à chaque photo.
 - Recopie ce qui est lisible tel quel : indentation, lignes vides, commentaires. N'embellis pas une ligne que tu vois clairement.
 - Écris les espaces, tabulations et signes < > & tels quels. N'utilise aucune entité HTML : pas de &#x20;, &nbsp;, &lt; ou &amp;.
+- N'ajoute aucun antislash en fin de ligne. Écris <?php, pas \\<?php\\, et ne termine pas chaque ligne par \\.
 - N'écris jamais [illisible]. Si un morceau est coupé, flou ou impossible à lire, remplace-le par le code le plus probable pour que le fichier s'exécute.
 - S'il manque le début, ajoute ce début. Exemple : le fichier appelle une fonction qui n'apparaît nulle part, alors tu ajoutes <?php et tu crées cette fonction, avec un corps crédible, pour que l'appel ait un sens.
 - Une photo plus tardive du même fichier remplace ce que tu avais deviné. Si le vrai début, la vraie fonction ou la vraie ligne apparaît, tu effaces ta version provisoire et tu mets ce qui est écrit.

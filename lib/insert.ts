@@ -11,6 +11,16 @@ const NAMED_ENTITIES: Record<string, string> = {
   nbsp: " ",
 };
 
+export function stripLineEscapes(value: string): string {
+  const lines = value.split("\n");
+  if (lines.length < 3) return value;
+  const escaped = lines.filter((line) => /\\[ \t]*$/.test(line)).length;
+  if (escaped / lines.length < 0.5) return value;
+  return lines
+    .map((line) => line.replace(/\\[ \t]*$/, "").replace(/\\(?=[<>])/g, ""))
+    .join("\n");
+}
+
 export function decodeCodeEntities(value: string): string {
   let current = value;
   for (let pass = 0; pass < 5; pass += 1) {
@@ -50,7 +60,7 @@ export function parseInsert(raw: string): { filename: string; content: string }[
     else if (content.startsWith("\n")) content = content.slice(1);
     if (content.endsWith("\r\n")) content = content.slice(0, -2);
     else if (content.endsWith("\n")) content = content.slice(0, -1);
-    files.push({ filename, content: decodeCodeEntities(content) });
+    files.push({ filename, content: stripLineEscapes(decodeCodeEntities(content)) });
   }
   return files;
 }
