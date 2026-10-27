@@ -8,8 +8,8 @@ Règles :
 - Repère les noms de fichiers (onglets d'éditeur, barre de titre, chemin, en-tête).
 - Si le chemin contient des dossiers, garde-les dans filename (exemple : src/chat.php).
 - Plusieurs photos du même fichier : fusionne-les en une seule version complète, dans l'ordre de lecture (haut du fichier, puis la suite).
-- Recopie le code tel qu'il est écrit. N'invente pas de fonctions, d'imports ou de lignes absentes.
-- Si un morceau est illisible, laisse un commentaire dans le langage du fichier : [illisible]
+- Recopie ce qui est lisible tel quel. N'embellis pas une ligne clairement visible.
+- N'écris jamais [illisible]. Si un morceau est coupé, flou ou absent, mets le code le plus probable pour que le fichier s'exécute. S'il manque le début et qu'une fonction est appelée sans être définie, ajoute <?php et crée cette fonction. Si une photo suivante montre le vrai texte, remplace ce que tu avais deviné.
 - Le champ content est le fichier brut, sans balises markdown, sans backticks et sans entités HTML. Un espace s'écrit espace, jamais &#x20; ni &nbsp;.
 - Si aucun code n'est lisible, renvoie files vide et explique pourquoi dans notes.
 - Réponds uniquement avec un objet JSON.
