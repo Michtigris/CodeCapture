@@ -5,7 +5,7 @@ import { INTERVALS } from "@/lib/constants";
 import type { CameraDTO } from "@/lib/types";
 import { deviceId, readCameraChoice, readPcCameras, writeCameraChoice, writePcCameras, type PcCamera } from "./device";
 import { formatRemain } from "./format";
-import { fileToJpeg, frameFromVideo, frameMatchingView } from "./images";
+import { frameFromVideo, frameMatchingView } from "./images";
 import { clampZoom, detectTarget, frameAtZoom, frameOnTarget, FULL, placeVideo, smoothLock, type NormRect } from "./targetLock";
 import { TipButton } from "./TipButton";
 
@@ -31,8 +31,6 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   const hardwareZoomRef = useRef<number | null>(null);
   const zoomRangeRef = useRef<ZoomRange | null>(null);
   const nativeBrokenRef = useRef(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const nativeRef = useRef<HTMLInputElement>(null);
   const onCaptureRef = useRef(onCapture);
   const onToastRef = useRef(onToast);
   const shootRef = useRef<() => Promise<void>>(async () => {});
@@ -616,19 +614,6 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     }
   }
 
-  async function importFiles(list: FileList | null) {
-    const files = [...(list ?? [])];
-    if (!files.length) return;
-    for (const file of files) {
-      try {
-        const blob = await fileToJpeg(file);
-        await onCaptureRef.current(blob);
-      } catch (error) {
-        onToast(error instanceof Error ? error.message : "Import impossible.");
-      }
-    }
-  }
-
   const remain = nextAt ? formatRemain(nextAt - now) : null;
   const linked = cameras.filter((camera) => camera.phone && camera.deviceId !== selfId);
   const selected = linked.find((camera) => camera.deviceId === selectedId) ?? null;
@@ -867,12 +852,6 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
                 <Glyph name="shutter" />
               </TipButton>
             )}
-            <TipButton label="Importer" className="icon-btn" onClick={() => fileRef.current?.click()}>
-              <Glyph name="import" />
-            </TipButton>
-            <TipButton label="Appareil" className="icon-btn" onClick={() => nativeRef.current?.click()}>
-              <Glyph name="roll" />
-            </TipButton>
           </div>
         ) : ready ? (
           <>
@@ -917,28 +896,6 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
           </>
         ) : null}
       </div>
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        multiple
-        hidden
-        onChange={(event) => {
-          void importFiles(event.target.files);
-          event.target.value = "";
-        }}
-      />
-      <input
-        ref={nativeRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        hidden
-        onChange={(event) => {
-          void importFiles(event.target.files);
-          event.target.value = "";
-        }}
-      />
     </section>
   );
 }
@@ -1070,17 +1027,5 @@ function Glyph({ name }: { name: string }) {
       </svg>
     );
   }
-  if (name === "import") {
-    return (
-      <svg {...props}>
-        <path d="M12 4v10M8 10l4 4 4-4M5 19h14" />
-      </svg>
-    );
-  }
-  return (
-    <svg {...props}>
-      <rect x="4" y="6" width="16" height="12" />
-      <path d="M8 6l1.5-2h5L16 6" />
-    </svg>
-  );
+  return null;
 }
