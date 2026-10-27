@@ -670,9 +670,6 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
         <div className="sheet">
           <div className="sheet-bar">
             <strong>{tabLabel(current.filename)}</strong>
-            <span>
-              {current.language} · {shown.split("\n").length} lignes
-            </span>
             <div className="sheet-actions">
               <button type="button" className="icon-act" aria-label="Copier tout" onClick={() => void copyFile(current)}>
                 <BarIcon name="copy" />
@@ -715,7 +712,6 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
               </div>
             </div>
           </div>
-          <p className="hint">Clic droit sur le code pour tout copier.</p>
           <div
             className="sheet-scroll"
             onContextMenu={(event) => {
