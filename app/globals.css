@@ -734,8 +734,10 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
 .tab-slot.folder.on > .tab { color: var(--lime); }
 .tab-slot.pad.on { background: var(--bg); box-shadow: none; }
 .tab-slot.pad.on > .tab { color: var(--text); }
-.tab-slot:has(.tab-x) > .tab { padding-right: 2px; }
+.tab-slot.on:has(.tab-x) > .tab,
+.tab-slot:hover:has(.tab-x) > .tab { padding-right: 2px; }
 .tab-x {
+  display: none;
   border: none;
   background: transparent;
   color: var(--muted);
@@ -743,6 +745,8 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
   font-size: 15px;
   line-height: 1;
 }
+.tab-slot.on .tab-x,
+.tab-slot:hover .tab-x { display: block; }
 .tab-slot.on .tab-x { color: #c8c8c8; }
 .tab-x:hover { color: #ff6b6b; }
 .tab {
