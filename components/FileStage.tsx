@@ -74,6 +74,42 @@ function isNotepad(filename: string) {
   return /^\d+\.txt$/i.test(splitPath(filename).name);
 }
 
+function BarIcon({ name }: { name: "copy" | "download" | "menu" }) {
+  const props = {
+    width: 16,
+    height: 16,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true as const,
+  };
+  if (name === "copy") {
+    return (
+      <svg {...props}>
+        <rect x="8" y="8" width="12" height="12" rx="1.5" />
+        <path d="M4 16V5a1 1 0 0 1 1-1h11" />
+      </svg>
+    );
+  }
+  if (name === "download") {
+    return (
+      <svg {...props}>
+        <path d="M12 4v10M8 10l4 4 4-4M5 19h14" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...props}>
+      <circle cx="12" cy="6" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="18" r="1.3" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 function tabLabel(filename: string) {
   const name = splitPath(filename).name;
   const numbered = name.match(/^(\d+)\.txt$/i);
@@ -716,8 +752,8 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
                 Copier
               </button>
               <div className="dot-menu">
-                <button type="button" aria-label="Plus d’actions" aria-expanded={menu} onClick={() => setMenu((open) => !open)}>
-                  ···
+                <button type="button" className="icon-act" aria-label="Plus d’actions" aria-expanded={menu} onClick={() => setMenu((open) => !open)}>
+                  <BarIcon name="menu" />
                 </button>
                 {menu ? (
                   <div className="dot-pop" role="menu">
@@ -754,22 +790,24 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
               {current.language} · {shown.split("\n").length} lignes
             </span>
             <div className="sheet-actions">
-              <button type="button" onClick={() => void copyFile(current)}>
-                Copier tout
+              <button type="button" className="icon-act" aria-label="Copier tout" onClick={() => void copyFile(current)}>
+                <BarIcon name="copy" />
               </button>
               <button
                 type="button"
+                className="icon-act"
+                aria-label="Télécharger"
                 onClick={() => {
                   void presentCode(current.filename, current.content).then(({ text }) => {
                     downloadText(splitPath(current.filename).name, text);
                   });
                 }}
               >
-                Télécharger
+                <BarIcon name="download" />
               </button>
               <div className="dot-menu">
-                <button type="button" aria-label="Modifier le fichier" aria-expanded={menu} onClick={() => setMenu((open) => !open)}>
-                  ···
+                <button type="button" className="icon-act" aria-label="Modifier le fichier" aria-expanded={menu} onClick={() => setMenu((open) => !open)}>
+                  <BarIcon name="menu" />
                 </button>
                 {menu ? (
                   <div className="dot-pop" role="menu">

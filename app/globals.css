@@ -907,6 +907,13 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
   padding: 8px 10px;
   font-size: 13px;
 }
+.sheet-actions button.icon-act {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
 .sheet-scroll { flex: 1; overflow: auto; min-height: 0; }
 .code-row { display: grid; grid-template-columns: auto minmax(0, 1fr); min-width: min-content; }
 .gutter {
