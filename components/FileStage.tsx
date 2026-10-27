@@ -440,17 +440,6 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
       <div className="pane-head">
         <h2>Fichiers</h2>
         <div className="head-actions">
-          <button
-            type="button"
-            className={onCaptureTab ? "capture-link on" : "capture-link"}
-            onClick={() => {
-              setTab(CAPTURE_TAB);
-              setMenu(false);
-              setEditing(false);
-            }}
-          >
-            Dernière capture
-          </button>
         {captures.length > 1 ? (
           <select
             className="history"
@@ -482,6 +471,17 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
         </div>
       ) : null}
       <div className="tabs" role="tablist" aria-label="Fichiers">
+        <button
+          type="button"
+          className={onCaptureTab ? "capture-link on" : "capture-link"}
+          onClick={() => {
+            setTab(CAPTURE_TAB);
+            setMenu(false);
+            setEditing(false);
+          }}
+        >
+          Dernière capture
+        </button>
         {visible.map((row) => (
           <TabChip
             key={row.file.filename}
