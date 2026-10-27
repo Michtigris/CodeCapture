@@ -64,6 +64,9 @@ type Props = {
   onSaveFile: (input: { captureId: string | null; filename: string; content: string; archivePending?: boolean }) => Promise<void>;
   onToast: (message: string) => void;
   focusFile?: { name: string; nonce: number } | null;
+  canArchive?: boolean;
+  onArchive?: (filenames: string[]) => Promise<void>;
+  onRestore?: (filenames: string[]) => Promise<void>;
 };
 
 function isNotepad(filename: string) {
@@ -83,7 +86,40 @@ type Placed = {
   folder: string;
 };
 
-export function FileStage({ captures, photos, captureId, onSelectCapture, onSaveFile, onToast, focusFile }: Props) {
+type Undo =
+  | { kind: "files"; names: string[] }
+  | { kind: "pad"; name: string; text: string };
+
+function TabChip({
+  label,
+  title,
+  selected,
+  kind,
+  onOpen,
+  onArchive,
+}: {
+  label: string;
+  title?: string;
+  selected: boolean;
+  kind?: "folder" | "pad";
+  onOpen: () => void;
+  onArchive?: () => void;
+}) {
+  return (
+    <div className={["tab-slot", kind ?? "", selected ? "on" : ""].filter(Boolean).join(" ")}>
+      <button type="button" role="tab" className="tab" title={title} aria-selected={selected} onClick={onOpen}>
+        {label}
+      </button>
+      {onArchive ? (
+        <button type="button" className="tab-x" aria-label={`Archiver ${label}`} onClick={onArchive}>
+          ×
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+export function FileStage({ captures, photos, captureId, onSelectCapture, onSaveFile, onToast, focusFile, canArchive = false, onArchive, onRestore }: Props) {
   const capture = captures.find((item) => item.id === captureId) ?? captures[0] ?? null;
   const files = capture?.files ?? EMPTY_FILES;
   const placed = useMemo(() => {
@@ -91,6 +127,7 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
     const rows: Placed[] = [];
     for (const item of captures) {
       for (const file of item.files) {
+        if (file.archivedAt) continue;
         rows.push({
           file,
           captureId: item.id,
@@ -189,6 +226,47 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
   const shown = styledReady && styled ? styled.text : decodedContent;
   const shownHtml = styledReady && styled ? styled.html : "";
 
+  const undos = useRef<Undo[]>([]);
+  const restoreRef = useRef(onRestore);
+  restoreRef.current = onRestore;
+  const toastRef = useRef(onToast);
+  toastRef.current = onToast;
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key.toLowerCase() !== "z" || !(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      const last = undos.current.pop();
+      if (!last) return;
+      event.preventDefault();
+      if (last.kind === "pad") {
+        setPads((list) => (list.includes(last.name) ? list : [...list, last.name]));
+        setPadText((map) => ({ ...map, [last.name]: last.text }));
+        setTab(last.name);
+        toastRef.current("Onglet ramené");
+        return;
+      }
+      const restore = restoreRef.current;
+      if (!restore) {
+        undos.current.push(last);
+        return;
+      }
+      void restore(last.names)
+        .then(() => {
+          const back = splitPath(last.names[0] ?? "");
+          setFolder(back.folder);
+          if (last.names[0]) setTab(last.names[0]);
+          toastRef.current("Ramené");
+        })
+        .catch(() => {
+          undos.current.push(last);
+          toastRef.current("Impossible de ramener.");
+        });
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const seenFocus = useRef(0);
   useEffect(() => {
     if (!focusFile || seenFocus.current === focusFile.nonce) return;
@@ -203,6 +281,51 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
     setEditing(false);
     setMenu(false);
   }, [focusFile, placed, onSelectCapture]);
+
+  async function archiveNames(names: string[], message: string) {
+    if (!onArchive || !names.length) return false;
+    try {
+      await onArchive(names);
+      undos.current.push({ kind: "files", names });
+      if (names.includes(tab)) setTab(CAPTURE_TAB);
+      onToast(message);
+      return true;
+    } catch (error) {
+      onToast(error instanceof Error ? error.message : "Archivage impossible.");
+      return false;
+    }
+  }
+
+  function filenamesIn(folderName: string) {
+    const names = new Set<string>();
+    for (const row of [...placed.open, ...placed.history]) {
+      if (row.folder === folderName) names.add(row.file.filename);
+    }
+    return [...names];
+  }
+
+  function askArchiveFolder(folderName: string) {
+    const names = filenamesIn(folderName);
+    if (!names.length) return;
+    const label = folderLabel(folderName);
+    const count = names.length;
+    if (!window.confirm(`Archiver le dossier ${label} et ${count} fichier${count > 1 ? "s" : ""} ? Ctrl+Z les ramène.`)) return;
+    void archiveNames(names, "Dossier archivé").then((ok) => {
+      if (ok && activeFolder === folderName) setFolder(null);
+    });
+  }
+
+  function dropPad(name: string) {
+    undos.current.push({ kind: "pad", name, text: padText[name] ?? "" });
+    setPads((list) => list.filter((item) => item !== name));
+    setPadText((map) => {
+      const next = { ...map };
+      delete next[name];
+      return next;
+    });
+    if (tab === name) setTab(CAPTURE_TAB);
+    onToast("Onglet archivé");
+  }
 
   function chooseFolder(next: string) {
     setFolder(next);
@@ -347,51 +470,48 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
       {showFolders ? (
         <div className="tabs" role="tablist" aria-label="Dossiers">
           {folders.map((item) => (
-            <button
+            <TabChip
               key={item || "racine"}
-              type="button"
-              className={item === activeFolder ? "tab folder on" : "tab folder"}
-              onClick={() => chooseFolder(item)}
-            >
-              {folderLabel(item)}
-            </button>
+              label={folderLabel(item)}
+              selected={item === activeFolder}
+              kind="folder"
+              onOpen={() => chooseFolder(item)}
+              onArchive={canArchive ? () => askArchiveFolder(item) : undefined}
+            />
           ))}
         </div>
       ) : null}
       <div className="tabs" role="tablist" aria-label="Fichiers">
         {visible.map((row) => (
-          <button
+          <TabChip
             key={row.file.filename}
-            type="button"
-            role="tab"
-            title={row.file.filename}
-            aria-selected={row.file.filename === tab}
-            className={row.file.filename === tab ? (isNotepad(row.file.filename) ? "tab on pad" : "tab on") : "tab"}
-            onClick={() => {
+            label={tabLabel(row.file.filename)}
+            title={tabLabel(row.file.filename)}
+            selected={row.file.filename === tab}
+            kind={isNotepad(row.file.filename) ? "pad" : undefined}
+            onOpen={() => {
               onSelectCapture(row.captureId);
               setFolder(row.folder);
               setTab(row.file.filename);
               setEditing(false);
               setMenu(false);
             }}
-          >
-            {tabLabel(row.file.filename)}
-          </button>
+            onArchive={canArchive ? () => void archiveNames([row.file.filename], `${tabLabel(row.file.filename)} archivé`) : undefined}
+          />
         ))}
         {openPads.map((name) => (
-          <button
+          <TabChip
             key={name}
-            type="button"
-            role="tab"
-            className={name === tab ? "tab on pad" : "tab"}
-            onClick={() => {
+            label={tabLabel(name)}
+            selected={name === tab}
+            kind="pad"
+            onOpen={() => {
               setTab(name);
               setEditing(false);
               setMenu(false);
             }}
-          >
-            {tabLabel(name)}
-          </button>
+            onArchive={canArchive ? () => dropPad(name) : undefined}
+          />
         ))}
         <button type="button" className="tab plus" aria-label="Nouvel onglet" onClick={openPad}>
           +
@@ -403,21 +523,20 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
           <p className="hint">Les onglets de plus de 7 jours.</p>
           <div className="tabs">
             {historyHere.map((row) => (
-              <button
+              <TabChip
                 key={row.file.filename}
-                type="button"
-                title={row.file.filename}
-                className={row.file.filename === tab ? "tab on" : "tab"}
-                onClick={() => {
+                label={tabLabel(row.file.filename)}
+                title={tabLabel(row.file.filename)}
+                selected={row.file.filename === tab}
+                onOpen={() => {
                   onSelectCapture(row.captureId);
                   setFolder(row.folder);
                   setTab(row.file.filename);
                   setEditing(false);
                   setMenu(false);
                 }}
-              >
-                {tabLabel(row.file.filename)}
-              </button>
+                onArchive={canArchive ? () => void archiveNames([row.file.filename], `${tabLabel(row.file.filename)} archivé`) : undefined}
+              />
             ))}
           </div>
         </details>

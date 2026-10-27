@@ -28,7 +28,7 @@ export async function GET() {
         copiedIds: group.copiedIds ?? [],
         photoCount: photos.length,
         pendingCount: photos.filter((photo) => !photo.captureId).length,
-        fileCount: latest?.files.length ?? 0,
+        fileCount: latest?.files.filter((file) => !file.archivedAt).length ?? 0,
         lastCaptureAt: latest?.createdAt ?? null,
         owner: group.userId === user.id,
       };

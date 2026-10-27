@@ -1,7 +1,7 @@
 import { json } from "@/lib/http";
 import { getCurrentUser } from "@/lib/session";
-import { getGroup, isMember, saveInsertedFiles, saveManualFile } from "@/lib/store";
-import { parseInsert } from "@/lib/insert";
+import { getGroup, isMember, saveInsertedFiles, saveManualFile, setFilesArchived } from "@/lib/store";
+import { cleanInsertName, parseInsert } from "@/lib/insert";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +16,14 @@ export async function POST(request: Request, ctx: Ctx) {
   if (!group || !isMember(group, user.id)) return json({ error: "Groupe introuvable." }, 404);
 
   const body = await request.json().catch(() => null);
+  if (Array.isArray(body?.archive) || Array.isArray(body?.restore)) {
+    if (group.userId !== user.id) return json({ error: "Seul le créateur du groupe peut archiver." }, 403);
+    const source = (Array.isArray(body.archive) ? body.archive : body.restore) as unknown[];
+    const names = [...new Set(source.map((item) => (typeof item === "string" ? cleanInsertName(item) : null)).filter((item): item is string => !!item))].slice(0, 200);
+    if (!names.length) return json({ error: "Rien à archiver." }, 400);
+    const count = await setFilesArchived(group.id, names, Array.isArray(body.archive));
+    return json({ ok: true, count });
+  }
   if (typeof body?.block === "string") {
     const files = parseInsert(body.block);
     if (!files) return json({ error: "Ce collage n'a pas la forme attendue." }, 400);
@@ -39,7 +47,7 @@ export async function POST(request: Request, ctx: Ctx) {
         createdAt: capture.createdAt,
         notes: capture.notes,
         photoCount: capture.photoIds.length,
-        files: capture.files,
+        files: capture.files.filter((file) => !file.archivedAt),
       },
     });
   } catch (error) {

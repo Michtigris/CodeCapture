@@ -746,6 +746,27 @@ export function Workspace({ groupId }: { groupId: string }) {
             setFollowLatest(false);
             setCaptureId(id);
           }}
+          canArchive={data.group.owner === true}
+          onArchive={async (filenames) => {
+            const res = await fetch(`/api/groups/${groupId}/files`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ archive: filenames }),
+            });
+            const payload = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(payload.error || "Archivage impossible.");
+            await reload();
+          }}
+          onRestore={async (filenames) => {
+            const res = await fetch(`/api/groups/${groupId}/files`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ restore: filenames }),
+            });
+            const payload = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(payload.error || "Impossible de ramener.");
+            await reload();
+          }}
           onSaveFile={async ({ captureId: target, filename, content, archivePending }) => {
             const res = await fetch(`/api/groups/${groupId}/files`, {
               method: "POST",

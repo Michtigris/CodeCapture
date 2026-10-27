@@ -37,7 +37,7 @@ export async function GET(_request: Request, ctx: Ctx) {
     createdAt: capture.createdAt,
     notes: capture.notes,
     photoCount: capture.photoIds.length,
-    files: capture.files,
+    files: capture.files.filter((file) => !file.archivedAt),
   }));
   return json({
     group: {
@@ -48,6 +48,7 @@ export async function GET(_request: Request, ctx: Ctx) {
       intervalSec: group.intervalSec,
       createdAt: group.createdAt,
       copiedIds: group.copiedIds ?? [],
+      owner: group.userId === access.user.id,
     },
     photos: photoDTOs,
     captures: captureDTOs,

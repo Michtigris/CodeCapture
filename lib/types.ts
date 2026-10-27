@@ -3,6 +3,7 @@ export type ExtractedFile = {
   language: string;
   content: string;
   updatedAt?: string;
+  archivedAt?: string;
 };
 
 export type PhotoDTO = {
@@ -28,6 +29,7 @@ export type GroupDTO = {
   intervalSec: number;
   createdAt: string;
   copiedIds: string[];
+  owner: boolean;
 };
 
 export type CameraDTO = {

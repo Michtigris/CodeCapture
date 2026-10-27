@@ -1002,6 +1002,7 @@ export function saveManualFile(input: {
       existing.content = content;
       existing.language = fileLanguage(filename);
       existing.updatedAt = now;
+      delete existing.archivedAt;
     } else {
       capture.files.push({ filename, language: fileLanguage(filename), content, updatedAt: now });
     }
@@ -1040,6 +1041,7 @@ export function saveInsertedFiles(
         target.file.content = content;
         target.file.language = fileLanguage(filename);
         target.file.updatedAt = now;
+        delete target.file.archivedAt;
         focusCapture = target.capture.id;
         focusName = filename;
         continue;
@@ -1069,6 +1071,28 @@ export function saveInsertedFiles(
       group.copiedIds = [];
     }
     return { captureId: focusCapture, filename: focusName };
+  });
+}
+
+export function setFilesArchived(groupId: string, filenames: string[], archived: boolean): Promise<number> {
+  const wanted = new Set(filenames);
+  return update((db) => {
+    let count = 0;
+    const now = new Date().toISOString();
+    for (const capture of db.captures) {
+      if (capture.groupId !== groupId) continue;
+      for (const file of capture.files) {
+        if (!wanted.has(file.filename)) continue;
+        if (archived) {
+          if (!file.archivedAt) count += 1;
+          file.archivedAt = now;
+        } else if (file.archivedAt) {
+          delete file.archivedAt;
+          count += 1;
+        }
+      }
+    }
+    return count;
   });
 }
 
