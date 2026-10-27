@@ -923,19 +923,18 @@ pre.code {
   .group-head, .groupbar, .creator, .link-row { flex-direction: column; align-items: stretch; }
   .group-actions { display: none; }
   .workspace { height: auto; min-height: 100dvh; overflow: visible; }
-  .switch {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 6px;
-    padding: 10px 12px 0;
+  .switch { display: block; padding: 10px 12px 0; }
+  .switch button {
+    width: 100%;
+    border: none;
+    background: var(--lime);
+    color: var(--ink);
+    padding: 14px 12px;
+    font-weight: 700;
   }
-  .switch button { border: 1px solid var(--line); background: transparent; padding: 10px 6px; }
-  .switch button.on { background: var(--lime); color: var(--ink); border-color: var(--lime); }
   .grid { display: block; padding: 12px; }
   .pane { display: none; margin-top: 12px; }
-  .workspace[data-panel="camera"] .pane-camera,
-  .workspace[data-panel="photos"] .pane-photos,
-  .workspace[data-panel="fichiers"] .pane-files { display: flex; }
+  .workspace .pane-camera { display: flex; }
   .sheet-scroll { min-height: 55dvh; }
   .topbar { align-items: flex-start; }
   .who { display: none; }

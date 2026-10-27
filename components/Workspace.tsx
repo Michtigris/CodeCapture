@@ -6,6 +6,7 @@ import { CHAT_PROMPT, DEFAULT_BRIEF, MAX_PHOTOS_PER_SEND } from "@/lib/constants
 import { INSERT_DAY_MS, parseInsert } from "@/lib/insert";
 import type { GroupPayload, PublicUser } from "@/lib/types";
 import { CameraPane } from "./CameraPane";
+import { fileToJpeg } from "./images";
 import { copyPhotoSet, copyText } from "./copy";
 import { deviceId } from "./device";
 import { FileStage } from "./FileStage";
@@ -69,6 +70,7 @@ export function Workspace({ groupId }: { groupId: string }) {
   const [insertDot, setInsertDot] = useState<"idle" | "ok" | "bad" | "same">("idle");
   const [focusFile, setFocusFile] = useState<{ name: string; nonce: number } | null>(null);
   const insertLock = useRef(false);
+  const galleryRef = useRef<HTMLInputElement>(null);
   const dotTimer = useRef(0);
   const seenShots = useRef(0);
   const pendingShots = (data?.photos ?? []).filter((photo) => !photo.captureId).length;
@@ -251,6 +253,22 @@ export function Workspace({ groupId }: { groupId: string }) {
     },
     [groupId, reload],
   );
+
+  async function importGallery(list: FileList | null) {
+    const files = [...(list ?? [])];
+    if (!files.length) return;
+    let sent = 0;
+    for (const file of files) {
+      try {
+        const blob = await fileToJpeg(file);
+        await upload(blob);
+        sent += 1;
+      } catch (error) {
+        toast(error instanceof Error ? error.message : "Import impossible.");
+      }
+    }
+    if (sent) toast(sent > 1 ? `${sent} photos ajoutées au lot` : "Photo ajoutée au lot");
+  }
 
   async function saveName() {
     if (!data) return;
@@ -468,7 +486,6 @@ export function Workspace({ groupId }: { groupId: string }) {
     setFollowLatest(false);
     setCaptureId(payload.captureId);
     setFocusFile({ name: payload.filename, nonce: Date.now() });
-    if (handheld) setPanel("fichiers");
     flashDot("ok", 1000);
     await reload();
   }
@@ -615,17 +632,20 @@ export function Workspace({ groupId }: { groupId: string }) {
         </p>
       ) : null}
       <div className="switch">
-        {(
-          [
-            ["camera", "Caméra"],
-            ["photos", "Photos"],
-            ["fichiers", "Fichiers"],
-          ] as const
-        ).map(([id, text]) => (
-          <button key={id} type="button" className={panel === id ? "on" : ""} onClick={() => setPanel(id)}>
-            {text}
-          </button>
-        ))}
+        <button type="button" onClick={() => galleryRef.current?.click()}>
+          Galerie
+        </button>
+        <input
+          ref={galleryRef}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          onChange={(event) => {
+            void importGallery(event.target.files);
+            event.target.value = "";
+          }}
+        />
       </div>
       <div className="grid">
         <div className="side">
