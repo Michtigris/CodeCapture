@@ -12,51 +12,6 @@ import { downloadBlob, zipFolder } from "./zip";
 const EMPTY_FILES: ExtractedFile[] = [];
 const CAPTURE_TAB = "__capture";
 
-type OcrWord = {
-  key: string;
-  text: string;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-};
-
-function readOcrWords(data: {
-  blocks?: {
-    paragraphs?: {
-      lines?: {
-        words?: { text?: string; confidence?: number; bbox?: { x0: number; y0: number; x1: number; y1: number } }[];
-      }[];
-    }[];
-  }[] | null;
-}, width: number, height: number): OcrWord[] {
-  const words: OcrWord[] = [];
-  for (const block of data.blocks ?? []) {
-    for (const paragraph of block.paragraphs ?? []) {
-      for (const line of paragraph.lines ?? []) {
-        const lineWords = line.words ?? [];
-        lineWords.forEach((word, index) => {
-          const box = word.bbox;
-          const raw = word.text?.trim() ?? "";
-          if (!box || !raw || (word.confidence ?? 0) < 20) return;
-          const w = ((box.x1 - box.x0) / width) * 100;
-          const h = ((box.y1 - box.y0) / height) * 100;
-          if (w < 0.3 || h < 0.4) return;
-          words.push({
-            key: `${words.length}-${raw}`,
-            text: index === lineWords.length - 1 ? `${raw}\n` : `${raw} `,
-            x: (box.x0 / width) * 100,
-            y: (box.y0 / height) * 100,
-            w,
-            h,
-          });
-        });
-      }
-    }
-  }
-  return words;
-}
-
 type Props = {
   captures: CaptureDTO[];
   photos: PhotoDTO[];
@@ -253,9 +208,6 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
   const [draft, setDraft] = useState("");
   const [pads, setPads] = useState<string[]>([]);
   const [padText, setPadText] = useState<Record<string, string>>({});
-  const [ocr, setOcr] = useState("");
-  const [ocrWords, setOcrWords] = useState<OcrWord[]>([]);
-  const [reading, setReading] = useState(false);
   const padRef = useRef<HTMLTextAreaElement>(null);
 
   if (seen !== captureKey) {
@@ -272,23 +224,22 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
     setMenu(false);
   }
 
-  const activeFolder = folder !== null && folders.includes(folder) ? folder : (folders[0] ?? "");
+  const onCaptureTab = tab === CAPTURE_TAB;
+  const activeFolder = onCaptureTab
+    ? null
+    : folder !== null && folders.includes(folder)
+      ? folder
+      : (folders[0] ?? "");
   const savedNames = useMemo(() => new Set(captures.flatMap((item) => item.files.map((file) => file.filename))), [captures]);
   const openPads = pads.filter((name) => !savedNames.has(name));
   const visible = showFolders ? placed.open.filter((row) => row.folder === activeFolder) : placed.open;
   const historyHere = showFolders ? placed.history.filter((row) => row.folder === activeFolder) : placed.history;
   const located = visible.find((row) => row.file.filename === tab) ?? placed.history.find((row) => row.file.filename === tab) ?? null;
   const current = located?.file ?? null;
-  const onCaptureTab = tab === CAPTURE_TAB;
   const onPad = isNotepad(tab) || openPads.includes(tab);
   const padValue = padText[tab] ?? current?.content ?? "";
 
   const latestPhoto = [...photos].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1) ?? null;
-
-  useEffect(() => {
-    setOcr("");
-    setOcrWords([]);
-  }, [latestPhoto?.id]);
 
   useEffect(() => {
     if (onPad) padRef.current?.focus();
@@ -392,7 +343,10 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
     try {
       await onArchive(names);
       undos.current.push({ kind: "files", names });
-      if (names.includes(tab)) setTab(CAPTURE_TAB);
+      if (names.includes(tab)) {
+        setTab(CAPTURE_TAB);
+        setFolder(null);
+      }
       onToast(message);
       return true;
     } catch (error) {
@@ -462,18 +416,24 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
       delete next[name];
       return next;
     });
-    if (tab === name) setTab(CAPTURE_TAB);
+    if (tab === name) {
+      setTab(CAPTURE_TAB);
+      setFolder(null);
+    }
     onToast("Onglet archivé");
   }
 
   function chooseFolder(next: string) {
     setFolder(next);
-    const first = placed.open.find((row) => row.folder === next);
-    if (!first) return;
-    onSelectCapture(first.captureId);
-    setTab(first.file.filename);
     setEditing(false);
     setMenu(false);
+    const first = placed.open.find((row) => row.folder === next);
+    if (!first) {
+      if (tab === CAPTURE_TAB) setTab("");
+      return;
+    }
+    onSelectCapture(first.captureId);
+    setTab(first.file.filename);
   }
 
   function openPad() {
@@ -506,46 +466,6 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
     await copyText(parts.join("\n\n"));
     onToast("Tout le code est copié");
     setMenu(false);
-  }
-
-  async function readText() {
-    if (!latestPhoto) {
-      onToast("Aucune photo à lire.");
-      return;
-    }
-    setReading(true);
-    setOcr("");
-    setOcrWords([]);
-    try {
-      const { createWorker } = await import("tesseract.js");
-      const worker = await createWorker("fra+eng");
-      const image = await fetch(latestPhoto.url).then((res) => res.blob());
-      const bitmap = await createImageBitmap(image);
-      const width = bitmap.width;
-      const height = bitmap.height;
-      bitmap.close();
-      const result = await worker.recognize(image, {}, { text: true, blocks: true });
-      await worker.terminate();
-      const text = result.data.text.trim();
-      setOcr(text || "Aucun texte lisible sur cette photo.");
-      setOcrWords(text ? readOcrWords(result.data, width, height) : []);
-    } catch {
-      setOcr("");
-      setOcrWords([]);
-      onToast("La lecture du texte a échoué. Réessaie.");
-    } finally {
-      setReading(false);
-    }
-  }
-
-  async function copySelection() {
-    const selected = window.getSelection()?.toString().trim() ?? "";
-    if (!selected) {
-      onToast("Sélectionne une partie du texte.");
-      return;
-    }
-    await copyText(selected);
-    onToast("Sélection copiée");
   }
 
   async function savePad(name: string, content: string) {
@@ -601,6 +521,7 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
           className={onCaptureTab ? "capture-link on" : "capture-link"}
           onClick={() => {
             setTab(CAPTURE_TAB);
+            setFolder(null);
             setMenu(false);
             setEditing(false);
           }}
@@ -612,7 +533,7 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
               <TabChip
                 key={item || "racine"}
                 label={folderLabel(item)}
-                selected={item === activeFolder}
+                selected={!onCaptureTab && item === activeFolder}
                 kind="folder"
                 onOpen={() => chooseFolder(item)}
                 onDouble={(anchor) => openFolderMenu(item, anchor)}
@@ -621,7 +542,7 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
             ))
           : null}
       </TabStrip>
-      <TabStrip label="Fichiers">
+      {onCaptureTab ? null : <TabStrip label="Fichiers">
         {visible.map((row) => (
           <TabChip
             key={row.file.filename}
@@ -656,8 +577,8 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
         <button type="button" className="tab plus" aria-label="Nouvel onglet" onClick={openPad}>
           +
         </button>
-      </TabStrip>
-      {historyHere.length ? (
+      </TabStrip>}
+      {!onCaptureTab && historyHere.length ? (
         <details className="file-history">
           <summary>Historique · {historyHere.length}</summary>
           <p className="hint">Les onglets de plus de 7 jours.</p>
@@ -683,54 +604,17 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
       ) : null}
       {onCaptureTab ? (
         <div className="sheet capture">
-          <div className="sheet-bar">
-            <strong>Dernière capture</strong>
-            {latestPhoto ? (
-              <div className="sheet-actions">
-                <button type="button" onClick={() => void readText()} disabled={reading}>
-                  {reading ? "Lecture…" : "Lire le texte"}
-                </button>
-                <button type="button" onClick={() => void copyText(ocr).then(() => onToast("Texte copié"))} disabled={!ocr}>
-                  Copier tout
-                </button>
-                <button type="button" onClick={() => void copySelection()} disabled={!ocr}>
-                  Copier la sélection
-                </button>
-              </div>
-            ) : null}
-          </div>
           {latestPhoto ? (
             <div className="capture-shot">
               <div className="ocr-stage">
                 <img key={latestPhoto.id} src={latestPhoto.url} alt="Dernière capture" draggable={false} />
-                {ocrWords.length ? (
-                  <div className="ocr-layer">
-                    {ocrWords.map((word) => (
-                      <span
-                        key={word.key}
-                        className="ocr-word"
-                        style={{
-                          left: `${word.x}%`,
-                          top: `${word.y}%`,
-                          width: `${word.w}%`,
-                          height: `${word.h}%`,
-                          ["--h" as string]: word.h,
-                        }}
-                      >
-                        {word.text}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
               </div>
-              {ocrWords.length ? <p className="hint">Sélectionne le texte directement sur la photo, puis copie-le.</p> : null}
             </div>
           ) : (
             <div className="capture-hold">
               <span>Connecte un appareil pour continuer</span>
             </div>
           )}
-          {ocr && !ocrWords.length ? <pre className="ocr-text">{ocr}</pre> : null}
         </div>
       ) : onPad ? (
         <form
