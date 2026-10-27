@@ -91,6 +91,45 @@ type Undo =
   | { kind: "files"; names: string[] }
   | { kind: "pad"; name: string; text: string };
 
+const TAB_IDLE_MS = 2 * 60 * 1000;
+
+function TabStrip({ label, children }: { label?: string; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const last = useRef(Date.now());
+
+  useEffect(() => {
+    const current = ref.current;
+    if (!current) return;
+    const strip: HTMLDivElement = current;
+    function onWheel(event: WheelEvent) {
+      if (strip.scrollWidth <= strip.clientWidth + 1) return;
+      const dominant = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+      if (!dominant) return;
+      let delta = dominant;
+      if (event.deltaMode === 1) delta *= 16;
+      else if (event.deltaMode === 2) delta *= strip.clientWidth;
+      event.preventDefault();
+      strip.scrollLeft += delta;
+      last.current = Date.now();
+    }
+    strip.addEventListener("wheel", onWheel, { passive: false });
+    const timer = window.setInterval(() => {
+      if (strip.scrollLeft <= 1) return;
+      if (Date.now() - last.current >= TAB_IDLE_MS) strip.scrollLeft = 0;
+    }, 1000);
+    return () => {
+      strip.removeEventListener("wheel", onWheel);
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  return (
+    <div ref={ref} className="tabs" role="tablist" aria-label={label} onPointerDown={() => { last.current = Date.now(); }}>
+      {children}
+    </div>
+  );
+}
+
 function TabChip({
   label,
   title,
@@ -521,7 +560,7 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
         </div>
       </div>
       {showFolders ? (
-        <div className="tabs" role="tablist" aria-label="Dossiers">
+        <TabStrip label="Dossiers">
           {folders.map((item) => (
             <TabChip
               key={item || "racine"}
@@ -533,9 +572,9 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
               onArchive={canArchive ? () => askArchiveFolder(item) : undefined}
             />
           ))}
-        </div>
+        </TabStrip>
       ) : null}
-      <div className="tabs" role="tablist" aria-label="Fichiers">
+      <TabStrip label="Fichiers">
         <button
           type="button"
           className={onCaptureTab ? "capture-link on" : "capture-link"}
@@ -581,12 +620,12 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
         <button type="button" className="tab plus" aria-label="Nouvel onglet" onClick={openPad}>
           +
         </button>
-      </div>
+      </TabStrip>
       {historyHere.length ? (
         <details className="file-history">
           <summary>Historique · {historyHere.length}</summary>
           <p className="hint">Les onglets de plus de 7 jours.</p>
-          <div className="tabs">
+          <TabStrip>
             {historyHere.map((row) => (
               <TabChip
                 key={row.file.filename}
@@ -603,7 +642,7 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
                 onArchive={canArchive ? () => void archiveNames([row.file.filename], `${tabLabel(row.file.filename)} archivé`) : undefined}
               />
             ))}
-          </div>
+          </TabStrip>
         </details>
       ) : null}
       {onCaptureTab ? (
