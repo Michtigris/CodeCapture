@@ -28,20 +28,29 @@ export async function copyPhotoSet(shots: { id: string; url: string }[]): Promis
       copied.push(shot.id);
     }
     if (!bitmaps.length) throw new Error("Photos introuvables.");
-    const width = 1100;
+    const maxSide = 16384;
     const gap = 18;
-    const heights = bitmaps.map((bitmap) => Math.max(1, Math.round(width * (bitmap.height / bitmap.width))));
+    const nativeWidth = bitmaps.reduce((max, bitmap) => Math.max(max, bitmap.width), 1);
+    const nativeHeight = bitmaps.reduce((sum, bitmap) => sum + bitmap.height, 0) + gap * Math.max(0, bitmaps.length - 1);
+    const scale = Math.min(1, maxSide / nativeWidth, maxSide / nativeHeight);
+    const sizes = bitmaps.map((bitmap) => ({
+      w: Math.max(1, Math.round(bitmap.width * scale)),
+      h: Math.max(1, Math.round(bitmap.height * scale)),
+    }));
+    const gapPx = Math.round(gap * scale);
     const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = heights.reduce((sum, height) => sum + height, 0) + gap * (bitmaps.length - 1);
+    canvas.width = Math.max(1, Math.round(nativeWidth * scale));
+    canvas.height = sizes.reduce((sum, size) => sum + size.h, 0) + gapPx * Math.max(0, sizes.length - 1);
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Copie impossible.");
+    ctx.imageSmoothingEnabled = scale < 1;
+    ctx.imageSmoothingQuality = "high";
     ctx.fillStyle = "#11140f";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     let y = 0;
     bitmaps.forEach((bitmap, index) => {
-      ctx.drawImage(bitmap, 0, y, width, heights[index]);
-      y += heights[index] + gap;
+      ctx.drawImage(bitmap, 0, y, sizes[index].w, sizes[index].h);
+      y += sizes[index].h + gapPx;
       bitmap.close();
     });
     const blob = await new Promise<Blob>((resolve, reject) => {
