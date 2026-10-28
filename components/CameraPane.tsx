@@ -199,13 +199,14 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
       return;
     }
     if (isAutoInterval(ownInterval)) {
+      const opening = leadRef.current;
       leadRef.current = false;
       baselineRef.current = null;
       changeStampRef.current = 0;
-      coolRef.current = false;
+      coolRef.current = opening;
       let cancelled = false;
       let timer = 0;
-      let phase: "watch" | "cool" = "watch";
+      let phase: "lead" | "watch" | "cool" = opening ? "lead" : "watch";
       let mark = Date.now();
       let shown = 0;
       const show = (due: number) => {
@@ -213,6 +214,14 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
           shown = due;
           setNextAt(due);
         }
+      };
+      const armWatch = () => {
+        phase = "watch";
+        mark = Date.now();
+        coolRef.current = false;
+        changeStampRef.current = 0;
+        baselineRef.current = null;
+        shown = 0;
       };
       const tick = () => {
         if (cancelled) return;
@@ -228,21 +237,18 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
             timer = window.setTimeout(tick, 200);
             return;
           }
-          phase = "watch";
-          mark = Date.now();
-          coolRef.current = false;
-          changeStampRef.current = 0;
-          shown = 0;
+          armWatch();
           tick();
           return;
         }
-        const due = mark + 180_000;
+        const due = mark + (phase === "lead" ? 5_000 : 180_000);
         show(due);
-        const moved = changeStampRef.current > mark;
+        const moved = phase === "watch" && changeStampRef.current > mark;
         if (!moved && due - now > 40) {
           timer = window.setTimeout(tick, 200);
           return;
         }
+        const openingShot = phase === "lead";
         timer = window.setTimeout(async () => {
           if (cancelled || document.hidden) {
             tick();
@@ -259,12 +265,15 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
             }
           }
           if (cancelled) return;
-          phase = "cool";
-          mark = Date.now();
-          coolRef.current = true;
-          changeStampRef.current = 0;
-          baselineRef.current = null;
-          shown = 0;
+          if (openingShot) armWatch();
+          else {
+            phase = "cool";
+            mark = Date.now();
+            coolRef.current = true;
+            changeStampRef.current = 0;
+            baselineRef.current = null;
+            shown = 0;
+          }
           tick();
         }, 0);
       };
