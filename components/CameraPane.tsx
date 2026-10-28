@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AUTO_INTERVAL, INTERVALS, SENSES, isAutoInterval, senseById, type SenseId } from "@/lib/constants";
+import { AUTO_INTERVAL, GAPS, INTERVALS, SENSES, gapBySec, isAutoInterval, isGap, senseById, type GapSec, type SenseId } from "@/lib/constants";
 import type { CameraDTO } from "@/lib/types";
 import { deviceId, readCameraChoice, readPcCameras, writeCameraChoice, writePcCameras, type PcCamera } from "./device";
 import { formatRemain } from "./format";
@@ -51,6 +51,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   const [selectedId, setSelectedId] = useState("");
   const [ownInterval, setOwnInterval] = useState(intervalSec);
   const [sense, setSense] = useState<SenseId>("normal");
+  const [gap, setGap] = useState<GapSec>(5);
   const [follow, setFollow] = useState(true);
   const [locked, setLocked] = useState(false);
   const [mag, setMag] = useState(1);
@@ -70,11 +71,14 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   const holdBoxRef = useRef(false);
   const intervalRef = useRef(intervalSec);
   const senseRef = useRef(senseById("normal"));
+  const gapRef = useRef<GapSec>(5);
+  const gapMarkRef = useRef(0);
   const baselineRef = useRef<Uint8Array | null>(null);
   const changeStampRef = useRef(0);
   const coolRef = useRef(false);
   intervalRef.current = ownInterval;
   senseRef.current = senseById(sense);
+  gapRef.current = gap;
   const facingRef = useRef(facing);
   const enableRef = useRef(enableCamera);
 
@@ -437,6 +441,31 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     }
   }
 
+  useEffect(() => {
+    let saved: GapSec = 5;
+    try {
+      saved = gapBySec(localStorage.getItem(`cc_gap_${groupId}`));
+    } catch {
+      saved = 5;
+    }
+    gapRef.current = saved;
+    setGap(saved);
+  }, [groupId]);
+
+  function rememberGap(sec: GapSec) {
+    if (gapRef.current !== sec) {
+      baselineRef.current = null;
+      gapMarkRef.current = 0;
+    }
+    gapRef.current = sec;
+    setGap(sec);
+    try {
+      localStorage.setItem(`cc_gap_${groupId}`, String(sec));
+    } catch {
+      /* navigation privée */
+    }
+  }
+
   function savedZoom() {
     try {
       const value = Number(localStorage.getItem(`cc_zoom_${groupId}`));
@@ -482,7 +511,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
         });
         if (!res.ok || stop) return;
         const payload = (await res.json()) as {
-          command?: { id?: number; action?: string; intervalSec?: number; sense?: string } | null;
+          command?: { id?: number; action?: string; intervalSec?: number; sense?: string; gap?: number } | null;
         };
         const command = payload.command;
         if (!command?.action) return;
@@ -491,6 +520,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
           if (commandId) ackRef.current = commandId;
         };
         if (SENSES.some((item) => item.id === command.sense)) rememberSense(command.sense as SenseId);
+        if (isGap(command.gap)) rememberGap(gapBySec(command.gap));
         if (command.action === "interval" && command.intervalSec) {
           setOwnInterval(command.intervalSec);
           onIntervalChange(command.intervalSec);
@@ -572,9 +602,21 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
         const pixels = ctx.getImageData(0, 0, sample.width, sample.height);
         if (runningRef.current && isAutoInterval(intervalRef.current)) {
           const level = senseRef.current;
-          const seen = pageShift(baselineRef.current, pixels, level.delta);
-          if (!baselineRef.current || coolRef.current) baselineRef.current = seen.gray;
-          else if (seen.ratio >= level.ratio && changeStampRef.current === 0) changeStampRef.current = Date.now();
+          if (!baselineRef.current || coolRef.current) {
+            baselineRef.current = pageShift(null, pixels, level.delta).gray;
+            gapMarkRef.current = time;
+          } else {
+            const gapMs = gapRef.current * 1000;
+            const due = gapMs <= 0 || time - gapMarkRef.current >= gapMs;
+            if (due) {
+              const seen = pageShift(baselineRef.current, pixels, level.delta);
+              if (seen.ratio >= level.ratio && changeStampRef.current === 0) changeStampRef.current = Date.now();
+              if (gapMs <= 0 || seen.ratio < level.ratio) {
+                baselineRef.current = seen.gray;
+                gapMarkRef.current = time;
+              }
+            }
+          }
         }
         let base = FULL;
         if (followRef.current) {
@@ -755,6 +797,8 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   const deskId = selectedId.startsWith("pc:") ? selectedId.slice(3) : "";
   const usingDesk = deskId.length > 0;
   const phoneKey = linked.map((camera) => camera.deviceId).join("|");
+  const shownInterval = wide && !usingDesk ? selected?.intervalSec || intervalSec : ownInterval;
+  const autoShown = isAutoInterval(shownInterval);
 
   useEffect(() => {
     if (!wide || !storedReady) return;
@@ -769,7 +813,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     writeCameraChoice(selectedId);
   }, [storedReady, selectedId]);
 
-  async function sendCommand(command: "start" | "stop" | "shoot" | "interval", seconds?: number, sense?: SenseId) {
+  async function sendCommand(command: "start" | "stop" | "shoot" | "interval", seconds?: number, sense?: SenseId, gapSec?: GapSec) {
     if (!selected) {
       onToast("Choisis un téléphone.");
       return;
@@ -777,7 +821,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     const res = await fetch(`/api/groups/${groupId}/camera`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "command", targetId: selected.deviceId, command, intervalSec: seconds, sense }),
+      body: JSON.stringify({ action: "command", targetId: selected.deviceId, command, intervalSec: seconds, sense, gap: gapSec }),
     });
     const payload = (await res.json().catch(() => ({}))) as { commandId?: number };
     if (!res.ok || typeof payload.commandId !== "number") {
@@ -910,24 +954,46 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
         {wide || ready ? (
         <label className="field">
           <span>{wide && !usingDesk ? "Une photo toutes les, pour l'appareil choisi" : "Une photo toutes les"}</span>
-          <select
-            className={pending?.action === "interval" ? "armed" : ""}
-            value={String(listedInterval(wide && !usingDesk ? selected?.intervalSec || intervalSec : ownInterval))}
-            disabled={wide && !usingDesk && !selected}
-            onChange={(event) => {
-              const seconds = Number(event.target.value);
-              if (wide && !usingDesk) void sendCommand("interval", seconds);
-              setOwnInterval(seconds);
-              onIntervalChange(seconds);
-            }}
-          >
-            {INTERVALS.map((item) => (
-              <option key={item.sec} value={item.sec}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-          {isAutoInterval(wide && !usingDesk ? selected?.intervalSec || intervalSec : ownInterval) ? (
+          <div className={autoShown ? "interval-split" : undefined}>
+            <select
+              className={pending?.action === "interval" ? "armed" : ""}
+              value={String(listedInterval(shownInterval))}
+              disabled={wide && !usingDesk && !selected}
+              onChange={(event) => {
+                const seconds = Number(event.target.value);
+                if (wide && !usingDesk) void sendCommand("interval", seconds, undefined, gapRef.current);
+                setOwnInterval(seconds);
+                onIntervalChange(seconds);
+              }}
+            >
+              {INTERVALS.map((item) => (
+                <option key={item.sec} value={item.sec}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+            {autoShown ? (
+              <select
+                aria-label="Temps entre deux images comparées"
+                value={String(gap)}
+                disabled={wide && !usingDesk && !selected}
+                onChange={(event) => {
+                  const next = gapBySec(event.target.value);
+                  rememberGap(next);
+                  if (wide && !usingDesk && selected) {
+                    void sendCommand("interval", selected.intervalSec || intervalSec, undefined, next);
+                  }
+                }}
+              >
+                {GAPS.map((item) => (
+                  <option key={item.sec} value={item.sec}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+          </div>
+          {autoShown ? (
             <div className="sense">
               <input
                 type="range"
@@ -941,7 +1007,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
                   if (!next) return;
                   rememberSense(next.id);
                   if (wide && !usingDesk && selected) {
-                    void sendCommand("interval", selected.intervalSec || intervalSec, next.id);
+                    void sendCommand("interval", selected.intervalSec || intervalSec, next.id, gapRef.current);
                   }
                 }}
               />

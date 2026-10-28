@@ -84,6 +84,7 @@ export type CameraCommand = {
   action: "start" | "stop" | "shoot" | "interval";
   intervalSec?: number;
   sense?: string;
+  gap?: number;
 };
 
 type DB = {

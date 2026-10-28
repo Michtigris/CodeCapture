@@ -660,6 +660,12 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
   user-select: none;
   -webkit-user-select: none;
 }
+.interval-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+.interval-split select { width: 100%; min-width: 0; }
 .sense { display: grid; gap: 2px; }
 .sense input[type="range"] {
   width: 100%;

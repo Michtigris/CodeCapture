@@ -13,6 +13,30 @@ export function senseById(id: string | null | undefined) {
   return SENSES.find((item) => item.id === id) ?? SENSES[2];
 }
 
+export const GAPS = [
+  { sec: 0, label: "Instant" },
+  { sec: 2, label: "2 secondes" },
+  { sec: 5, label: "5 secondes" },
+  { sec: 15, label: "15 secondes" },
+  { sec: 30, label: "30 secondes" },
+  { sec: 60, label: "1 minute" },
+] as const;
+
+export type GapSec = (typeof GAPS)[number]["sec"];
+
+export function gapBySec(value: unknown): GapSec {
+  if (value === null || value === undefined || value === "") return 5;
+  const sec = typeof value === "number" ? value : Number(value);
+  const found = GAPS.find((item) => item.sec === sec);
+  return found ? found.sec : 5;
+}
+
+export function isGap(value: unknown): value is GapSec {
+  if (value === null || value === undefined || value === "") return false;
+  const sec = typeof value === "number" ? value : Number(value);
+  return GAPS.some((item) => item.sec === sec);
+}
+
 export const INTERVALS = [
   { sec: 15, label: "15 secondes" },
   { sec: 30, label: "30 secondes" },

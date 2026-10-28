@@ -1,4 +1,4 @@
-import { SENSES, isInterval } from "@/lib/constants";
+import { SENSES, gapBySec, isGap, isInterval } from "@/lib/constants";
 import { json } from "@/lib/http";
 import { getCurrentUser } from "@/lib/session";
 import { getGroup, groupPeople, isMember, listLiveCameras, pushCameraCommand, touchCamera } from "@/lib/store";
@@ -62,11 +62,13 @@ export async function POST(request: Request, ctx: Ctx) {
     const intervalSec = Number(body?.intervalSec);
     if (command === "interval" && !isInterval(intervalSec)) return json({ error: "Intervalle invalide." }, 400);
     const sense = SENSES.find((item) => item.id === body?.sense)?.id;
+    const gap = isGap(body?.gap) ? gapBySec(body.gap) : undefined;
     const commandId = await pushCameraCommand(id, {
       deviceId: targetId,
       action: command,
       intervalSec: command === "interval" ? intervalSec : undefined,
       sense,
+      gap,
     });
     const cameras = await listLiveCameras(id);
     const people = await groupPeople(id);
