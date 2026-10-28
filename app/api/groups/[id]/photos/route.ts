@@ -1,7 +1,7 @@
 import { json } from "@/lib/http";
 import { sniffImage } from "@/lib/sniff";
 import { getCurrentUser } from "@/lib/session";
-import { addPhoto, getGroup, isMember } from "@/lib/store";
+import { addPhoto, deleteHistoryPhotos, getGroup, isMember } from "@/lib/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,4 +34,15 @@ export async function POST(request: Request, ctx: Ctx) {
       url: `/api/groups/${group.id}/photos/${photo.id}`,
     },
   });
+}
+
+export async function DELETE(_request: Request, ctx: Ctx) {
+  const { id } = await ctx.params;
+  const user = await getCurrentUser();
+  if (!user) return json({ error: "Connexion requise." }, 401);
+  const group = await getGroup(id);
+  if (!group || !isMember(group, user.id)) return json({ error: "Groupe introuvable." }, 404);
+  if (group.userId !== user.id) return json({ error: "Seul le créateur du groupe peut vider l'historique." }, 403);
+  const count = await deleteHistoryPhotos(group.id);
+  return json({ ok: true, count });
 }

@@ -926,6 +926,24 @@ export async function addPhoto(groupId: string, ext: ImageExt, bytes: Buffer): P
   return photo;
 }
 
+export async function deleteHistoryPhotos(groupId: string): Promise<number> {
+  const victims = await update((db) => {
+    const gone = db.photos.filter((photo) => photo.groupId === groupId && photo.captureId);
+    if (!gone.length) return [] as PhotoRecord[];
+    const drop = new Set(gone.map((photo) => photo.id));
+    db.photos = db.photos.filter((photo) => !drop.has(photo.id));
+    for (const capture of db.captures) {
+      if (capture.groupId !== groupId || !capture.photoIds.some((id) => drop.has(id))) continue;
+      capture.photoIds = capture.photoIds.filter((id) => !drop.has(id));
+    }
+    const group = db.groups.find((item) => item.id === groupId);
+    if (group) group.copiedIds = group.copiedIds.filter((id) => !drop.has(id));
+    return gone;
+  });
+  await Promise.all(victims.map((photo) => removePhotoBytes(photo)));
+  return victims.length;
+}
+
 export async function deletePhoto(id: string): Promise<boolean> {
   const existing = await getPhoto(id);
   const removed = await update((db) => {

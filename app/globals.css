@@ -708,6 +708,17 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
 .own-confirm p { margin: 0; }
 .history-photos { padding: 0 12px 12px; }
 .history-photos summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
+.history-x {
+  margin-left: 8px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 0 4px;
+  font-size: 16px;
+  line-height: 1;
+  vertical-align: -1px;
+}
+.history-x:hover { color: #ff6b6b; }
 .history-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .frame-meta { display: flex; justify-content: space-between; gap: 6px; padding: 6px 8px 8px; }
 .frame-meta button { background: none; border: none; color: var(--muted); padding: 0; }

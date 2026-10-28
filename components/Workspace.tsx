@@ -313,6 +313,23 @@ export function Workspace({ groupId }: { groupId: string }) {
     await reload();
   }
 
+  async function clearHistory() {
+    if (!data) return;
+    const history = data.photos.filter((photo) => photo.captureId);
+    if (!history.length) return;
+    const count = history.length;
+    if (!window.confirm(`Supprimer les ${count} photos de l'historique ? Elles seront effacées du serveur.`)) return;
+    const res = await fetch(`/api/groups/${groupId}/photos`, { method: "DELETE" });
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    if (!res.ok) {
+      toast(payload.error || "Suppression impossible.");
+      return;
+    }
+    if (openPhoto && history.some((photo) => openPhoto.includes(photo.id))) setOpenPhoto(null);
+    toast(count > 1 ? `${count} photos supprimées` : "Photo supprimée");
+    await reload();
+  }
+
   async function preparePacket() {
     if (!data || packing || targetCount() === 0) return;
     setPacking(true);
@@ -683,7 +700,23 @@ export function Workspace({ groupId }: { groupId: string }) {
           })()}
           {data.photos.some((photo) => photo.captureId) ? (
             <details className="history-photos">
-              <summary>Historique · {data.photos.length - pending}</summary>
+              <summary>
+                Historique · {data.photos.length - pending}
+                {data.group.owner ? (
+                  <button
+                    type="button"
+                    className="history-x"
+                    aria-label="Supprimer les photos de l'historique"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      void clearHistory();
+                    }}
+                  >
+                    ×
+                  </button>
+                ) : null}
+              </summary>
               <div className="history-grid">
                 {[...data.photos].reverse().filter((photo) => photo.captureId).map((photo) => (
                   <article key={photo.id} className="lot-card past">
