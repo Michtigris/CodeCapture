@@ -65,6 +65,8 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   const readyRef = useRef(false);
   const runningRef = useRef(false);
   const nextAtRef = useRef<number | null>(null);
+  const resetLockRef = useRef(false);
+  const holdBoxRef = useRef(false);
   const facingRef = useRef(facing);
   const enableRef = useRef(enableCamera);
 
@@ -235,7 +237,17 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
       streamRef.current = stream;
       const video = videoRef.current;
       if (!video) return;
+      video.srcObject = null;
       video.srcObject = stream;
+      releaseVideoBox(video);
+      resetLockRef.current = true;
+      holdBoxRef.current = true;
+      const releaseHold = () => {
+        holdBoxRef.current = false;
+        resetLockRef.current = true;
+      };
+      video.addEventListener("resize", releaseHold, { once: true });
+      window.setTimeout(releaseHold, 700);
       await video.play();
       const track = stream.getVideoTracks()[0];
       const range = track ? zoomRangeOf(track) : null;
@@ -251,6 +263,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
       setReady(true);
       pushNativeZoom();
     } catch (error) {
+      holdBoxRef.current = false;
       setReady(false);
       setCameraError(explainCamera(error));
     }
@@ -438,8 +451,13 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
 
     const tick = (time: number) => {
       if (stopped) return;
-      if (time - last > 120 && video.videoWidth && ctx) {
+        if (time - last > 120 && video.videoWidth && ctx && !holdBoxRef.current) {
         last = time;
+        if (resetLockRef.current) {
+          resetLockRef.current = false;
+          lock = null;
+          misses = 0;
+        }
         let base = FULL;
         if (followRef.current) {
           ctx.drawImage(video, 0, 0, sample.width, sample.height);
@@ -928,6 +946,17 @@ function nativeZoomFor(slider: number, range: ZoomRange): number {
   if (!range.step || range.step <= 0) return clamped;
   const steps = Math.round((clamped - range.min) / range.step);
   return Math.min(range.max, Math.max(range.min, range.min + steps * range.step));
+}
+
+function releaseVideoBox(video: HTMLVideoElement) {
+  video.style.width = "";
+  video.style.height = "";
+  video.style.left = "";
+  video.style.top = "";
+  video.style.right = "";
+  video.style.bottom = "";
+  video.style.objectFit = "";
+  video.style.transform = "";
 }
 
 function openPhoneCamera(facing: "environment" | "user") {

@@ -186,7 +186,7 @@ export function placeVideo(video: HTMLVideoElement, finder: HTMLElement, crop: N
   video.style.top = `${(fh - crop.h * video.videoHeight * scale) / 2 - crop.y * video.videoHeight * scale}px`;
   video.style.right = "auto";
   video.style.bottom = "auto";
-  video.style.objectFit = "fill";
+  video.style.objectFit = "contain";
   video.style.transform = mirror ? "scaleX(-1)" : "none";
 }
 
