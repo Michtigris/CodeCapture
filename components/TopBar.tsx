@@ -46,12 +46,16 @@ export function TopBar({ name }: { name?: string }) {
           onClick={() => setAsk(false)}
         >
           <div className="ask" onClick={(event) => event.stopPropagation()}>
+            <i className="tick tl" />
+            <i className="tick tr" />
+            <i className="tick bl" />
+            <i className="tick br" />
             <p id="logout-title">Se déconnecter ?</p>
             <div className="row">
-              <button type="button" className="ghost" autoFocus onClick={() => setAsk(false)}>
+              <button type="button" className="cp-line" autoFocus onClick={() => setAsk(false)}>
                 Annuler
               </button>
-              <button type="button" className="lime" onClick={() => void logout()}>
+              <button type="button" className="cp" onClick={() => void logout()}>
                 Déconnexion
               </button>
             </div>

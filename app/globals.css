@@ -205,14 +205,19 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
 }
 .qr-card p { margin: 0; max-width: 34ch; }
 .ask {
-  width: min(100%, 360px);
+  position: relative;
+  width: min(100%, 420px);
   display: grid;
   gap: 16px;
-  padding: 18px;
-  background: var(--bg-2);
+  padding: 22px 18px 18px;
+  background:
+    linear-gradient(135deg, rgba(214, 255, 74, 0.07), transparent 32%),
+    var(--bg-2);
   border: 1px solid var(--line);
 }
 .ask p { margin: 0; font-size: 20px; letter-spacing: -0.03em; }
+.ask .row > .cp,
+.ask .row > .cp-line { flex: 1 1 0; min-width: 0; }
 .qr-frame { display: inline-block; }
 .qr-frame .qr-mark { width: min(420px, 78vw); padding: 16px; }
 
