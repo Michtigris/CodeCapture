@@ -1,7 +1,6 @@
-"use client";
+﻿"use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { MODELS } from "@/lib/constants";
 import type { GroupSummary, PublicUser } from "@/lib/types";
 import { copyText } from "./copy";
 import { QrMark } from "./QrMark";
@@ -9,11 +8,10 @@ import { TopBar } from "./TopBar";
 
 export function SettingsScreen() {
   const [me, setMe] = useState<PublicUser | null>(null);
-  const [hint, setHint] = useState<string | null>(null);
   const [name, setName] = useState("");
-  const [model, setModel] = useState("gpt-4o");
-  const [key, setKey] = useState("");
-  const [clearKey, setClearKey] = useState(false);
+  const [email, setEmail] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
   const [busy, setBusy] = useState(false);
@@ -32,9 +30,8 @@ export function SettingsScreen() {
       }
       const data = await res.json();
       setMe(data.user);
-      setHint(data.keyHint);
       setName(data.user.name);
-      setModel(data.user.model);
+      setEmail(data.user.email);
     });
     fetch("/api/groups", { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
@@ -53,9 +50,9 @@ export function SettingsScreen() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name,
-        model,
-        openaiKey: key,
-        clearKey,
+        email,
+        currentPassword,
+        password,
       }),
     });
     const data = await res.json().catch(() => ({}));
@@ -65,10 +62,11 @@ export function SettingsScreen() {
       return;
     }
     setMe(data.user);
-    setHint(data.keyHint);
-    setKey("");
-    setClearKey(false);
-    setSaved("Réglages enregistrés.");
+    setName(data.user.name);
+    setEmail(data.user.email);
+    setCurrentPassword("");
+    setPassword("");
+    setSaved("RÃ©glages enregistrÃ©s.");
   }
 
   async function removeGroup(id: string) {
@@ -84,7 +82,7 @@ export function SettingsScreen() {
   if (!me) {
     return (
       <main className="page">
-        <p className="boot wrap">Chargement…</p>
+        <p className="boot wrap">Chargementâ€¦</p>
       </main>
     );
   }
@@ -95,17 +93,12 @@ export function SettingsScreen() {
       <div className="wrap" style={{ maxWidth: 720 }}>
         <p className="kicker">Compte</p>
         <h1 className="display" style={{ fontSize: "clamp(36px, 5vw, 56px)", letterSpacing: "-0.045em", marginTop: 8 }}>
-          Réglages
+          RÃ©glages
         </h1>
-        <p className="lede">
-          La clé API OpenAI reste sur ce serveur. Elle sert uniquement à envoyer tes photos à ChatGPT pour en extraire
-          les fichiers. Tu peux en créer une sur platform.openai.com/api-keys. Tu peux aussi mettre OPENAI_API_KEY dans
-          un fichier .env.local.
-        </p>
         <section className="link-card share-card">
           <QrMark path="/" label="QR code vers CodeCapture" />
           <div className="share-copy">
-            <h2>Ouvrir sur un autre écran</h2>
+            <h2>Ouvrir sur un autre Ã©cran</h2>
             <p className="muted">Scanne le QR code, copie le lien, ou envoie-le par email.</p>
             {siteUrl ? <p className="link-url">{siteUrl}</p> : null}
             <div className="row">
@@ -114,7 +107,7 @@ export function SettingsScreen() {
                 className="ghost"
                 disabled={!siteUrl}
                 onClick={() => {
-                  void copyText(siteUrl).then(() => setCopied("Lien copié."));
+                  void copyText(siteUrl).then(() => setCopied("Lien copiÃ©."));
                 }}
               >
                 Copier le lien
@@ -135,45 +128,38 @@ export function SettingsScreen() {
         </section>
         <form className="form" onSubmit={onSubmit}>
           <label className="field">
-            <span>Prénom</span>
+            <span>PrÃ©nom</span>
             <input value={name} onChange={(event) => setName(event.target.value)} maxLength={40} required />
           </label>
           <label className="field">
-            <span>Modèle</span>
-            <select value={model} onChange={(event) => setModel(event.target.value)}>
-              {MODELS.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
+            <span>Email</span>
+            <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" required />
           </label>
-          <label className="field">
-            <span>Clé API OpenAI {hint ? `(enregistrée ${hint})` : "(aucune clé enregistrée)"}</span>
-            <input
-              value={key}
-              onChange={(event) => setKey(event.target.value)}
-              type="password"
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="sk-…"
-            />
-          </label>
-          {hint ? (
-            <label className="check">
-              <input type="checkbox" checked={clearKey} onChange={(event) => setClearKey(event.target.checked)} />
-              Supprimer la clé enregistrée
-            </label>
-          ) : null}
+          <SecretField
+            label="Mot de passe actuel"
+            value={currentPassword}
+            autoComplete="current-password"
+            onChange={setCurrentPassword}
+          />
+          <SecretField
+            label="Nouveau mot de passe"
+            value={password}
+            autoComplete="new-password"
+            onChange={setPassword}
+          />
+          <p className="hint">
+            Laisse le nouveau mot de passe vide pour garder lâ€™actuel. Le mot de passe dÃ©jÃ  enregistrÃ© ne sâ€™affiche pas :
+            il nâ€™est pas gardÃ© en clair. Afficher montre seulement ce que tu es en train de saisir.
+          </p>
           {error ? <p className="form-error">{error}</p> : null}
           {saved ? <p className="hint">{saved}</p> : null}
           <button className="lime" type="submit" disabled={busy}>
-            {busy ? "Enregistrement…" : "Enregistrer"}
+            {busy ? "Enregistrementâ€¦" : "Enregistrer"}
           </button>
         </form>
         <section className="own-groups">
           <h2>Tes groupes</h2>
-          <p className="hint">Seul le compte qui a créé un groupe peut le supprimer.</p>
+          <p className="hint">Seul le compte qui a crÃ©Ã© un groupe peut le supprimer.</p>
           {groups === null ? null : groups.length === 0 ? (
             <p className="empty">Aucun groupe.</p>
           ) : (
@@ -185,10 +171,10 @@ export function SettingsScreen() {
                 {group.owner ? (
                   confirmId === group.id ? (
                     <div className="own-confirm">
-                      <p>Supprimer « {group.name} », ses photos et ses fichiers ? C’est définitif.</p>
+                      <p>Supprimer Â« {group.name} Â», ses photos et ses fichiers ? Câ€™est dÃ©finitif.</p>
                       <div className="row">
                         <button type="button" className="danger" onClick={() => void removeGroup(group.id)}>
-                          Supprimer définitivement
+                          Supprimer dÃ©finitivement
                         </button>
                         <button type="button" className="ghost" onClick={() => setConfirmId(null)}>
                           Annuler
@@ -209,5 +195,35 @@ export function SettingsScreen() {
         </section>
       </div>
     </main>
+  );
+}
+
+function SecretField({
+  label,
+  value,
+  autoComplete,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  autoComplete: string;
+  onChange: (value: string) => void;
+}) {
+  const [shown, setShown] = useState(false);
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <div className="secret">
+        <input
+          value={value}
+          type={shown ? "text" : "password"}
+          autoComplete={autoComplete}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <button type="button" onClick={() => setShown((open) => !open)}>
+          {shown ? "Masquer" : "Afficher"}
+        </button>
+      </div>
+    </label>
   );
 }

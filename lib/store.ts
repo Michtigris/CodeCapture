@@ -376,14 +376,24 @@ export function createUser(input: {
 
 export function updateUser(
   id: string,
-  patch: Partial<Pick<UserRecord, "name" | "openaiKey" | "model">>,
+  patch: Partial<Pick<UserRecord, "name" | "email" | "openaiKey" | "model" | "passwordHash" | "salt">>,
 ): Promise<UserRecord | null> {
   return update((db) => {
     const user = db.users.find((item) => item.id === id);
     if (!user) return null;
+    if (patch.email !== undefined && patch.email !== user.email) {
+      if (db.users.some((item) => item.id !== id && item.email === patch.email)) {
+        throw new Error("Un compte existe déjà avec cet email.");
+      }
+      user.email = patch.email;
+    }
     if (patch.name !== undefined) user.name = patch.name;
     if (patch.openaiKey !== undefined) user.openaiKey = patch.openaiKey;
     if (patch.model !== undefined) user.model = patch.model;
+    if (patch.passwordHash !== undefined && patch.salt !== undefined) {
+      user.passwordHash = patch.passwordHash;
+      user.salt = patch.salt;
+    }
     return user;
   });
 }
