@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AUTO_INTERVAL, INTERVALS, isAutoInterval } from "@/lib/constants";
+import { AUTO_INTERVAL, INTERVALS, SENSES, isAutoInterval, senseById, type SenseId } from "@/lib/constants";
 import type { CameraDTO } from "@/lib/types";
 import { deviceId, readCameraChoice, readPcCameras, writeCameraChoice, writePcCameras, type PcCamera } from "./device";
 import { formatRemain } from "./format";
@@ -50,6 +50,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   const [selfId, setSelfId] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [ownInterval, setOwnInterval] = useState(intervalSec);
+  const [sense, setSense] = useState<SenseId>("normal");
   const [follow, setFollow] = useState(true);
   const [locked, setLocked] = useState(false);
   const [mag, setMag] = useState(1);
@@ -68,10 +69,12 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   const resetLockRef = useRef(false);
   const holdBoxRef = useRef(false);
   const intervalRef = useRef(intervalSec);
+  const senseRef = useRef(senseById("normal"));
   const baselineRef = useRef<Uint8Array | null>(null);
   const changeStampRef = useRef(0);
   const coolRef = useRef(false);
   intervalRef.current = ownInterval;
+  senseRef.current = senseById(sense);
   const facingRef = useRef(facing);
   const enableRef = useRef(enableCamera);
 
@@ -415,6 +418,25 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     setOwnInterval(intervalSec);
   }, [intervalSec]);
 
+  useEffect(() => {
+    let saved: SenseId = "normal";
+    try {
+      saved = senseById(localStorage.getItem(`cc_sense_${groupId}`)).id;
+    } catch {
+      saved = "normal";
+    }
+    setSense(saved);
+  }, [groupId]);
+
+  function rememberSense(id: SenseId) {
+    setSense(id);
+    try {
+      localStorage.setItem(`cc_sense_${groupId}`, id);
+    } catch {
+      /* navigation privée */
+    }
+  }
+
   function savedZoom() {
     try {
       const value = Number(localStorage.getItem(`cc_zoom_${groupId}`));
@@ -460,7 +482,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
         });
         if (!res.ok || stop) return;
         const payload = (await res.json()) as {
-          command?: { id?: number; action?: string; intervalSec?: number } | null;
+          command?: { id?: number; action?: string; intervalSec?: number; sense?: string } | null;
         };
         const command = payload.command;
         if (!command?.action) return;
@@ -468,6 +490,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
         const done = () => {
           if (commandId) ackRef.current = commandId;
         };
+        if (SENSES.some((item) => item.id === command.sense)) rememberSense(command.sense as SenseId);
         if (command.action === "interval" && command.intervalSec) {
           setOwnInterval(command.intervalSec);
           onIntervalChange(command.intervalSec);
@@ -548,9 +571,10 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
         ctx.drawImage(video, 0, 0, sample.width, sample.height);
         const pixels = ctx.getImageData(0, 0, sample.width, sample.height);
         if (runningRef.current && isAutoInterval(intervalRef.current)) {
-          const seen = pageShift(baselineRef.current, pixels);
+          const level = senseRef.current;
+          const seen = pageShift(baselineRef.current, pixels, level.delta);
           if (!baselineRef.current || coolRef.current) baselineRef.current = seen.gray;
-          else if (seen.ratio >= 0.25 && changeStampRef.current === 0) changeStampRef.current = Date.now();
+          else if (seen.ratio >= level.ratio && changeStampRef.current === 0) changeStampRef.current = Date.now();
         }
         let base = FULL;
         if (followRef.current) {
@@ -745,7 +769,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     writeCameraChoice(selectedId);
   }, [storedReady, selectedId]);
 
-  async function sendCommand(command: "start" | "stop" | "shoot" | "interval", seconds?: number) {
+  async function sendCommand(command: "start" | "stop" | "shoot" | "interval", seconds?: number, sense?: SenseId) {
     if (!selected) {
       onToast("Choisis un téléphone.");
       return;
@@ -753,7 +777,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     const res = await fetch(`/api/groups/${groupId}/camera`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "command", targetId: selected.deviceId, command, intervalSec: seconds }),
+      body: JSON.stringify({ action: "command", targetId: selected.deviceId, command, intervalSec: seconds, sense }),
     });
     const payload = (await res.json().catch(() => ({}))) as { commandId?: number };
     if (!res.ok || typeof payload.commandId !== "number") {
@@ -894,6 +918,33 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
               </option>
             ))}
           </select>
+          {isAutoInterval(wide && !usingDesk ? selected?.intervalSec || intervalSec : ownInterval) ? (
+            <div className="sense">
+              <input
+                type="range"
+                min={0}
+                max={SENSES.length - 1}
+                step={1}
+                value={Math.max(0, SENSES.findIndex((item) => item.id === sense))}
+                aria-label="Sensibilité, de faible à forte"
+                onChange={(event) => {
+                  const next = SENSES[Number(event.target.value)];
+                  if (!next) return;
+                  rememberSense(next.id);
+                  if (wide && !usingDesk && selected) {
+                    void sendCommand("interval", selected.intervalSec || intervalSec, next.id);
+                  }
+                }}
+              />
+              <div className="sense-marks">
+                {SENSES.map((item) => (
+                  <span key={item.id} className={item.id === sense ? "on" : ""}>
+                    {item.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </label>
         ) : null}
         {(!wide || usingDesk) && running ? (

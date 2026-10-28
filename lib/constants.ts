@@ -1,5 +1,18 @@
 export const AUTO_INTERVAL = -1;
 
+export const SENSES = [
+  { id: "faible", label: "Faible", ratio: 0.08, delta: 16 },
+  { id: "moyen", label: "Moyen", ratio: 0.15, delta: 24 },
+  { id: "normal", label: "Normal", ratio: 0.25, delta: 32 },
+  { id: "forte", label: "Forte", ratio: 0.45, delta: 48 },
+] as const;
+
+export type SenseId = (typeof SENSES)[number]["id"];
+
+export function senseById(id: string | null | undefined) {
+  return SENSES.find((item) => item.id === id) ?? SENSES[2];
+}
+
 export const INTERVALS = [
   { sec: 15, label: "15 secondes" },
   { sec: 30, label: "30 secondes" },

@@ -131,14 +131,18 @@ export function detectTarget(image: { width: number; height: number; data: Uint8
   return { x, y, w: x2 - x, h: y2 - y };
 }
 
-export function pageShift(prev: Uint8Array | null, image: { width: number; height: number; data: Uint8ClampedArray }) {
+export function pageShift(
+  prev: Uint8Array | null,
+  image: { width: number; height: number; data: Uint8ClampedArray },
+  delta = 32,
+) {
   const { width: w, height: h, data: px } = image;
   const gray = new Uint8Array(w * h);
   let changed = 0;
   for (let i = 0; i < w * h; i++) {
     const g = (px[i * 4] * 0.299 + px[i * 4 + 1] * 0.587 + px[i * 4 + 2] * 0.114) | 0;
     gray[i] = g;
-    if (prev && prev.length === gray.length && Math.abs(g - prev[i]) > 32) changed += 1;
+    if (prev && prev.length === gray.length && Math.abs(g - prev[i]) > delta) changed += 1;
   }
   const ratio = prev && prev.length === gray.length ? changed / gray.length : 0;
   return { gray, ratio };

@@ -83,6 +83,7 @@ export type CameraCommand = {
   deviceId: string;
   action: "start" | "stop" | "shoot" | "interval";
   intervalSec?: number;
+  sense?: string;
 };
 
 type DB = {
