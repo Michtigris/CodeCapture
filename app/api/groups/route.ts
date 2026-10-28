@@ -29,6 +29,8 @@ export async function GET() {
         photoCount: photos.length,
         pendingCount: photos.filter((photo) => !photo.captureId).length,
         fileCount: latest?.files.filter((file) => !file.archivedAt).length ?? 0,
+        memberCount: new Set(group.memberIds).size,
+        creatorName: snap.names[group.userId] || "Inconnu",
         lastCaptureAt: latest?.createdAt ?? null,
         owner: group.userId === user.id,
       };

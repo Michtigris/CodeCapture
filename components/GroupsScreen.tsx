@@ -119,28 +119,36 @@ export function GroupsScreen() {
 
   function GroupCard({ group }: { group: GroupSummary }) {
     return (
-      <article className="card" key={group.id}>
-        <div>
-          <h2>
-            {group.name} <span className="group-code">{group.code}</span>
-          </h2>
-          <div className="card-meta">
-            <span>
-              {group.pendingCount} en attente · {group.photoCount} photo{group.photoCount > 1 ? "s" : ""}
-            </span>
-            <span>
-              {group.fileCount > 0
-                ? `${group.fileCount} fichier${group.fileCount > 1 ? "s" : ""} extrait${group.fileCount > 1 ? "s" : ""}`
-                : "Aucun fichier extrait"}
-            </span>
-            <span>{formatWhen(group.lastCaptureAt || group.createdAt)}</span>
+      <article className="shard">
+        <i className="tick tl" />
+        <i className="tick tr" />
+        <i className="tick bl" />
+        <i className="tick br" />
+        <div className="shard-top">
+          <h2>{group.name}</h2>
+          <span className="shard-code">{group.code}</span>
+        </div>
+        <dl className="shard-stats">
+          <div>
+            <dt>Créateur</dt>
+            <dd>{group.creatorName}</dd>
           </div>
-        </div>
-        <div className="row">
-          <button type="button" className="lime" onClick={() => openGroup(group)}>
-            Ouvrir
-          </button>
-        </div>
+          <div>
+            <dt>Membres</dt>
+            <dd>{group.memberCount}</dd>
+          </div>
+          <div>
+            <dt>Fichiers</dt>
+            <dd>{group.fileCount}</dd>
+          </div>
+          <div>
+            <dt>Créé</dt>
+            <dd>{formatWhen(group.createdAt)}</dd>
+          </div>
+        </dl>
+        <button type="button" className="cp" onClick={() => openGroup(group)}>
+          Ouvrir
+        </button>
       </article>
     );
   }
@@ -166,7 +174,7 @@ export function GroupsScreen() {
                 autoComplete="off"
                 autoCorrect="off"
               />
-              <button className="lime" type="submit" disabled={busy || !name.trim()}>
+              <button className="cp" type="submit" disabled={busy || !name.trim()}>
                 {busy ? "Création…" : "Créer"}
               </button>
             </form>
@@ -179,7 +187,7 @@ export function GroupsScreen() {
                 aria-label="Code du groupe"
                 autoCapitalize="characters"
               />
-              <button className="ghost" type="submit" disabled={joining || code.length !== 5}>
+              <button className="cp-line" type="submit" disabled={joining || code.length !== 5}>
                 {joining ? "…" : "Rejoindre"}
               </button>
             </form>
@@ -204,7 +212,7 @@ export function GroupsScreen() {
                     autoComplete="off"
                     autoCorrect="off"
                   />
-                  <button className="lime" type="submit" disabled={busy || !name.trim()}>
+                  <button className="cp" type="submit" disabled={busy || !name.trim()}>
                     {busy ? "…" : "Créer"}
                   </button>
                 </form>
@@ -217,7 +225,7 @@ export function GroupsScreen() {
                     aria-label="Code du groupe"
                     autoCapitalize="characters"
                   />
-                  <button className="ghost" type="submit" disabled={joining || code.length !== 5}>
+                  <button className="cp-line" type="submit" disabled={joining || code.length !== 5}>
                     {joining ? "…" : "Rejoindre"}
                   </button>
                 </form>

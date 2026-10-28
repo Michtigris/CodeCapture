@@ -66,7 +66,7 @@ export function SettingsScreen() {
     setEmail(data.user.email);
     setCurrentPassword("");
     setPassword("");
-    setSaved("RÃ©glages enregistrÃ©s.");
+    setSaved("Réglages enregistrés.");
   }
 
   async function removeGroup(id: string) {
@@ -82,7 +82,7 @@ export function SettingsScreen() {
   if (!me) {
     return (
       <main className="page">
-        <p className="boot wrap">Chargementâ€¦</p>
+        <p className="boot wrap">Chargement…</p>
       </main>
     );
   }
@@ -93,12 +93,12 @@ export function SettingsScreen() {
       <div className="wrap" style={{ maxWidth: 720 }}>
         <p className="kicker">Compte</p>
         <h1 className="display" style={{ fontSize: "clamp(36px, 5vw, 56px)", letterSpacing: "-0.045em", marginTop: 8 }}>
-          RÃ©glages
+          Réglages
         </h1>
         <section className="link-card share-card">
           <QrMark path="/" label="QR code vers CodeCapture" />
           <div className="share-copy">
-            <h2>Ouvrir sur un autre Ã©cran</h2>
+            <h2>Ouvrir sur un autre écran</h2>
             <p className="muted">Scanne le QR code, copie le lien, ou envoie-le par email.</p>
             {siteUrl ? <p className="link-url">{siteUrl}</p> : null}
             <div className="row">
@@ -107,7 +107,7 @@ export function SettingsScreen() {
                 className="ghost"
                 disabled={!siteUrl}
                 onClick={() => {
-                  void copyText(siteUrl).then(() => setCopied("Lien copiÃ©."));
+                  void copyText(siteUrl).then(() => setCopied("Lien copié."));
                 }}
               >
                 Copier le lien
@@ -128,7 +128,7 @@ export function SettingsScreen() {
         </section>
         <form className="form" onSubmit={onSubmit}>
           <label className="field">
-            <span>PrÃ©nom</span>
+            <span>Prénom</span>
             <input value={name} onChange={(event) => setName(event.target.value)} maxLength={40} required />
           </label>
           <label className="field">
@@ -148,18 +148,18 @@ export function SettingsScreen() {
             onChange={setPassword}
           />
           <p className="hint">
-            Laisse le nouveau mot de passe vide pour garder lâ€™actuel. Le mot de passe dÃ©jÃ  enregistrÃ© ne sâ€™affiche pas :
-            il nâ€™est pas gardÃ© en clair. Afficher montre seulement ce que tu es en train de saisir.
+            Laisse le nouveau mot de passe vide pour garder l'actuel. Le mot de passe déjà enregistré ne s'affiche pas :
+            il n'est pas gardé en clair. Afficher montre seulement ce que tu es en train de saisir.
           </p>
           {error ? <p className="form-error">{error}</p> : null}
           {saved ? <p className="hint">{saved}</p> : null}
           <button className="lime" type="submit" disabled={busy}>
-            {busy ? "Enregistrementâ€¦" : "Enregistrer"}
+            {busy ? "Enregistrement…" : "Enregistrer"}
           </button>
         </form>
         <section className="own-groups">
           <h2>Tes groupes</h2>
-          <p className="hint">Seul le compte qui a crÃ©Ã© un groupe peut le supprimer.</p>
+          <p className="hint">Seul le compte qui a créé un groupe peut le supprimer.</p>
           {groups === null ? null : groups.length === 0 ? (
             <p className="empty">Aucun groupe.</p>
           ) : (
@@ -171,10 +171,10 @@ export function SettingsScreen() {
                 {group.owner ? (
                   confirmId === group.id ? (
                     <div className="own-confirm">
-                      <p>Supprimer Â« {group.name} Â», ses photos et ses fichiers ? Câ€™est dÃ©finitif.</p>
+                      <p>Supprimer « {group.name} », ses photos et ses fichiers ? C'est définitif.</p>
                       <div className="row">
                         <button type="button" className="danger" onClick={() => void removeGroup(group.id)}>
-                          Supprimer dÃ©finitivement
+                          Supprimer définitivement
                         </button>
                         <button type="button" className="ghost" onClick={() => setConfirmId(null)}>
                           Annuler

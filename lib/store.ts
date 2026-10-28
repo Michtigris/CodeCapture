@@ -1152,16 +1152,23 @@ export function countForGroups(userId: string): Promise<{
   photos: PhotoRecord[];
   captures: CaptureRecord[];
   groups: GroupRecord[];
+  names: Record<string, string>;
 }> {
   return readThrough((db) => {
     const groups = db.groups
       .filter((group) => isMember(group, userId))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     const ids = new Set(groups.map((group) => group.id));
+    const creators = new Set(groups.map((group) => group.userId));
+    const names: Record<string, string> = {};
+    for (const user of db.users) {
+      if (creators.has(user.id)) names[user.id] = user.name;
+    }
     return {
       groups,
       photos: db.photos.filter((photo) => ids.has(photo.groupId)),
       captures: db.captures.filter((capture) => ids.has(capture.groupId)),
+      names,
     };
   });
 }
