@@ -790,18 +790,28 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   return (
     <section className="pane pane-camera">
       <div className="pane-head">
-        <h2>Caméra</h2>
+        <div className="cam-title">
+          <h2>Caméra</h2>
+          {layoutReady && wide ? (
+            <button
+              type="button"
+              className={usingDesk ? "pc-cam on" : "pc-cam"}
+              aria-label="Caméra de ce PC"
+              aria-pressed={usingDesk}
+              onClick={() => chooseSource("pc:chrome")}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="2" y="4" width="20" height="13" rx="2" />
+                <circle cx="12" cy="10.5" r="2.4" />
+                <path d="M8 21h8M12 17v4" />
+              </svg>
+            </button>
+          ) : null}
+        </div>
         {running || aimed ? <span className="tally">Série en cours</span> : null}
       </div>
-      {layoutReady && wide && !usingDesk ? (
+      {layoutReady && wide && !usingDesk && (pcCameras.length > 0 || linked.length > 0) ? (
         <div className="source-box">
-          {usingDesk ? null : (
-            <button type="button" className="pc-add" onClick={() => chooseSource("pc:chrome")}>
-              <span>Caméra de ce PC</span>
-              {running && remain ? <span className="source-remain">{remain}</span> : null}
-            </button>
-          )}
-          {!usingDesk && (pcCameras.length > 0 || linked.length > 0) ? (
             <div className="phone-stage sources">
               <ul>
                 {pcCameras.map((camera) => (
@@ -836,7 +846,6 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
                 ))}
               </ul>
             </div>
-          ) : null}
         </div>
       ) : null}
       {layoutReady && (!wide || usingDesk) ? (
