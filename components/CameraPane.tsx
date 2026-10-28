@@ -34,8 +34,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   const onCaptureRef = useRef(onCapture);
   const onToastRef = useRef(onToast);
   const shootRef = useRef<() => Promise<void>>(async () => {});
-  const greetedRef = useRef(false);
-  const commandShotRef = useRef(false);
+  const leadRef = useRef(false);
   const lastError = useRef("");
   const [facing, setFacing] = useState<"environment" | "user">("environment");
   const [ready, setReady] = useState(false);
@@ -215,7 +214,9 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
         if (!cancelled) schedule(ownInterval * 1000);
       }, delay);
     };
-    schedule(ownInterval * 1000);
+    const first = leadRef.current;
+    leadRef.current = false;
+    schedule(first ? 5000 : ownInterval * 1000);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
@@ -241,13 +242,14 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
       zoomRangeRef.current = range;
       nativeBrokenRef.current = !range;
       if (track) await focusTrack(track).catch(() => undefined);
-      zoomRef.current = 1;
+      zoomRef.current = savedZoom();
       hardwareZoomRef.current = null;
       cropRef.current = FULL;
-      setMag(1);
+      setMag(zoomRef.current);
       setLocked(false);
       setFacing(nextFacing);
       setReady(true);
+      pushNativeZoom();
     } catch (error) {
       setReady(false);
       setCameraError(explainCamera(error));
@@ -287,11 +289,12 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
       zoomRangeRef.current = range;
       nativeBrokenRef.current = !range;
       if (track) await focusTrack(track).catch(() => undefined);
-      zoomRef.current = 1;
+      zoomRef.current = savedZoom();
       hardwareZoomRef.current = null;
       cropRef.current = FULL;
-      setMag(1);
-      setViewMag(1);
+      setMag(zoomRef.current);
+      setViewMag(zoomRef.current);
+      pushNativeZoom();
       setLocked(false);
       followRef.current = false;
       setFollow(false);
@@ -312,19 +315,26 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     setOwnInterval(intervalSec);
   }, [intervalSec]);
 
-  useEffect(() => {
-    if (!ready || wide || greetedRef.current) return;
-    if (commandShotRef.current) {
-      commandShotRef.current = false;
-      greetedRef.current = true;
-      return;
+  function savedZoom() {
+    try {
+      const value = Number(localStorage.getItem(`cc_zoom_${groupId}`));
+      if (!Number.isFinite(value) || value < 1) return 1;
+      return clampZoom(value);
+    } catch {
+      return 1;
     }
-    greetedRef.current = true;
-    void shootRef.current().catch((error) => {
-      greetedRef.current = false;
-      onToastRef.current(error instanceof Error ? error.message : "Photo impossible.");
-    });
-  }, [ready, wide]);
+  }
+
+  function rememberZoom(zoom: number) {
+    const next = clampZoom(zoom);
+    zoomRef.current = next;
+    setMag(next);
+    try {
+      localStorage.setItem(`cc_zoom_${groupId}`, String(next));
+    } catch {
+      /* navigation privée */
+    }
+  }
 
   useEffect(() => {
     let stop = false;
@@ -358,25 +368,36 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
         const done = () => {
           if (commandId) ackRef.current = commandId;
         };
-        if (command.action === "interval" && command.intervalSec) setOwnInterval(command.intervalSec);
+        if (command.action === "interval" && command.intervalSec) {
+          setOwnInterval(command.intervalSec);
+          onIntervalChange(command.intervalSec);
+        }
         if (command.action === "stop") setRunning(false);
         if (command.action === "interval" || command.action === "stop" || !media.matches) {
           done();
           return;
         }
-        if (command.action === "shoot" || command.action === "start") {
-          commandShotRef.current = true;
-          if (command.action === "start") {
-            followRef.current = true;
-            setFollow(true);
-            setOwnInterval(60);
-            setRunning(true);
+        if (command.action === "start") {
+          followRef.current = true;
+          setFollow(true);
+          try {
+            if (!readyRef.current) await enableRef.current(facingRef.current);
+            if (streamRef.current && !runningRef.current) {
+              leadRef.current = true;
+              setRunning(true);
+            }
+          } catch (error) {
+            onToastRef.current(error instanceof Error ? error.message : "Photo impossible.");
+          } finally {
+            done();
           }
+          return;
+        }
+        if (command.action === "shoot") {
           try {
             if (!readyRef.current) await enableRef.current(facingRef.current);
             await shootRef.current();
           } catch (error) {
-            commandShotRef.current = false;
             onToastRef.current(error instanceof Error ? error.message : "Photo impossible.");
           } finally {
             done();
@@ -482,8 +503,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
       if (event.touches.length !== 2 || !pinchRef.current) return;
       event.preventDefault();
       const nextZoom = clampZoom(pinchRef.current.zoom * (distance(event.touches) / pinchRef.current.dist));
-      zoomRef.current = nextZoom;
-      setMag(nextZoom);
+      rememberZoom(nextZoom);
       pushNativeZoom();
     };
     const end = () => {
@@ -537,46 +557,25 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     if (videoRef.current) videoRef.current.srcObject = null;
   }
 
-  async function startSeries() {
+  function startSeries() {
+    leadRef.current = true;
     setRunning(true);
-    try {
-      await shoot();
-    } catch (error) {
-      onToast(error instanceof Error ? error.message : "Photo impossible.");
-    }
   }
 
   async function activate() {
     followRef.current = true;
     setFollow(true);
-    setOwnInterval(60);
-    onIntervalChange(60);
-    greetedRef.current = true;
     await enableCamera(facingRef.current);
-    if (!streamRef.current) {
-      greetedRef.current = false;
-      return;
-    }
+    if (!streamRef.current) return;
+    leadRef.current = true;
     setRunning(true);
-    try {
-      await shoot();
-    } catch (error) {
-      onToast(error instanceof Error ? error.message : "Photo impossible.");
-    }
   }
 
   async function startDesk() {
-    setOwnInterval(60);
-    onIntervalChange(60);
-    greetedRef.current = true;
     if (!streamRef.current) await openDesk();
     if (!streamRef.current) return;
+    leadRef.current = true;
     setRunning(true);
-    try {
-      await shoot();
-    } catch (error) {
-      onToast(error instanceof Error ? error.message : "Photo impossible.");
-    }
   }
 
   function chooseSource(id: string) {
@@ -734,8 +733,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
                 aria-label="Zoom, de ×1 à ×10"
                 onChange={(event) => {
                   const nextZoom = clampZoom(Number(event.target.value));
-                  zoomRef.current = nextZoom;
-                  setMag(nextZoom);
+                  rememberZoom(nextZoom);
                   pushNativeZoom();
                 }}
               />
@@ -775,10 +773,8 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
             onChange={(event) => {
               const seconds = Number(event.target.value);
               if (wide && !usingDesk) void sendCommand("interval", seconds);
-              else {
-                setOwnInterval(seconds);
-                onIntervalChange(seconds);
-              }
+              setOwnInterval(seconds);
+              onIntervalChange(seconds);
             }}
           >
             {INTERVALS.map((item) => (
