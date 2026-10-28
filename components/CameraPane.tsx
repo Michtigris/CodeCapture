@@ -248,7 +248,6 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
           timer = window.setTimeout(tick, 200);
           return;
         }
-        const openingShot = phase === "lead";
         timer = window.setTimeout(async () => {
           if (cancelled || document.hidden) {
             tick();
@@ -265,15 +264,12 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
             }
           }
           if (cancelled) return;
-          if (openingShot) armWatch();
-          else {
-            phase = "cool";
-            mark = Date.now();
-            coolRef.current = true;
-            changeStampRef.current = 0;
-            baselineRef.current = null;
-            shown = 0;
-          }
+          phase = "cool";
+          mark = Date.now();
+          coolRef.current = true;
+          changeStampRef.current = 0;
+          baselineRef.current = null;
+          shown = 0;
           tick();
         }, 0);
       };
