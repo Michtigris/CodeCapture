@@ -667,42 +667,42 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
               {running && remain ? <span className="source-remain">{remain}</span> : null}
             </button>
           )}
-          <div className="phone-stage sources">
-            <ul>
-              {usingDesk
-                ? null
-                : pcCameras.map((camera) => (
-                    <li key={camera.id} className="source-row">
-                      <button
-                        type="button"
-                        className={selectedId === `pc:${camera.id}` ? "on" : ""}
-                        onClick={() => chooseSource(`pc:${camera.id}`)}
-                      >
-                        <span>{camera.label}</span>
-                        <span>Ce PC</span>
-                      </button>
-                      <button type="button" className="source-drop" onClick={() => forgetPc(camera.id)}>
-                        Retirer
-                      </button>
-                    </li>
-                  ))}
-              {linked.map((camera) => (
-                <li key={camera.deviceId}>
-                  <button
-                    type="button"
-                    className={camera.deviceId === selectedId ? "on" : ""}
-                    onClick={() => chooseSource(camera.deviceId)}
-                  >
-                    <span>{camera.label}</span>
-                    <span className="source-state">{camera.camera ? "Caméra allumée" : "Connecté"}</span>
-                    {camera.running && camera.nextAt && camera.nextAt > now ? (
-                      <span className="source-remain">{formatRemain(camera.nextAt - now)}</span>
-                    ) : null}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
+          {!usingDesk && (pcCameras.length > 0 || linked.length > 0) ? (
+            <div className="phone-stage sources">
+              <ul>
+                {pcCameras.map((camera) => (
+                  <li key={camera.id} className="source-row">
+                    <button
+                      type="button"
+                      className={selectedId === `pc:${camera.id}` ? "on" : ""}
+                      onClick={() => chooseSource(`pc:${camera.id}`)}
+                    >
+                      <span>{camera.label}</span>
+                      <span>Ce PC</span>
+                    </button>
+                    <button type="button" className="source-drop" onClick={() => forgetPc(camera.id)}>
+                      Retirer
+                    </button>
+                  </li>
+                ))}
+                {linked.map((camera) => (
+                  <li key={camera.deviceId}>
+                    <button
+                      type="button"
+                      className={camera.deviceId === selectedId ? "on" : ""}
+                      onClick={() => chooseSource(camera.deviceId)}
+                    >
+                      <span>{camera.label}</span>
+                      <span className="source-state">{camera.camera ? "Caméra allumée" : "Connecté"}</span>
+                      {camera.running && camera.nextAt && camera.nextAt > now ? (
+                        <span className="source-remain">{formatRemain(camera.nextAt - now)}</span>
+                      ) : null}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
       ) : null}
       {layoutReady && (!wide || usingDesk) ? (

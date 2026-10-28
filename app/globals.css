@@ -710,7 +710,6 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
 .history-photos summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
 .history-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .frame-meta { display: flex; justify-content: space-between; gap: 6px; padding: 6px 8px 8px; }
-.copied-mark { color: var(--lime); font-style: normal; }
 .frame-meta button { background: none; border: none; color: var(--muted); padding: 0; }
 .quiet { padding: 0 12px 12px; }
 

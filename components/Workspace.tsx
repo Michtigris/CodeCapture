@@ -637,7 +637,6 @@ export function Workspace({ groupId }: { groupId: string }) {
         <section className="pane pane-photos">
           {(() => {
             const shots = data.photos.filter((photo) => !photo.captureId);
-            const copied = new Set(data.group.copiedIds ?? []);
             const index = shots.length ? Math.min(lotIndex, shots.length - 1) : 0;
             const photo = shots[index];
             return (
@@ -667,10 +666,7 @@ export function Workspace({ groupId }: { groupId: string }) {
                 </div>
                 {photo ? (
                   <div className="frame-meta">
-                    <span>
-                      {formatWhen(photo.createdAt)}
-                      {copied.has(photo.id) ? <em className="copied-mark"> · copiée</em> : null}
-                    </span>
+                    <span>{formatWhen(photo.createdAt)}</span>
                     <button
                       type="button"
                       onClick={() => {
