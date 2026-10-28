@@ -1,7 +1,7 @@
 import { isInterval } from "@/lib/constants";
 import { json } from "@/lib/http";
 import { getCurrentUser } from "@/lib/session";
-import { getGroup, isMember, listLiveCameras, pushCameraCommand, touchCamera } from "@/lib/store";
+import { getGroup, groupPeople, isMember, listLiveCameras, pushCameraCommand, touchCamera } from "@/lib/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,10 +13,14 @@ async function owned(id: string) {
   if (!user) return { error: json({ error: "Connexion requise." }, 401) };
   const group = await getGroup(id);
   if (!group || !isMember(group, user.id)) return { error: json({ error: "Groupe introuvable." }, 404) };
-  return { group };
+  return { user, group };
 }
 
-function present(cameras: Awaited<ReturnType<typeof listLiveCameras>>, fallbackInterval: number) {
+function present(
+  cameras: Awaited<ReturnType<typeof listLiveCameras>>,
+  fallbackInterval: number,
+  names: Record<string, string>,
+) {
   return cameras.map((camera) => ({
     deviceId: camera.deviceId,
     seenAt: camera.seenAt,
@@ -25,6 +29,7 @@ function present(cameras: Awaited<ReturnType<typeof listLiveCameras>>, fallbackI
     running: camera.running === true,
     intervalSec: camera.intervalSec || fallbackInterval,
     label: camera.label || (camera.phone !== false ? "Téléphone" : "Ordinateur"),
+    ownerName: camera.userId ? names[camera.userId] || "" : "",
     ack: camera.ack || 0,
     nextAt: camera.nextAt && camera.nextAt > Date.now() ? camera.nextAt : 0,
   }));
@@ -35,7 +40,8 @@ export async function GET(_request: Request, ctx: Ctx) {
   const access = await owned(id);
   if ("error" in access && access.error) return access.error;
   const cameras = await listLiveCameras(id);
-  return json({ cameras: present(cameras, access.group.intervalSec) });
+  const people = await groupPeople(id);
+  return json({ cameras: present(cameras, access.group.intervalSec, people.names) });
 }
 
 export async function POST(request: Request, ctx: Ctx) {
@@ -61,7 +67,8 @@ export async function POST(request: Request, ctx: Ctx) {
       intervalSec: command === "interval" ? intervalSec : undefined,
     });
     const cameras = await listLiveCameras(id);
-    return json({ cameras: present(cameras, access.group.intervalSec), commandId });
+    const people = await groupPeople(id);
+    return json({ cameras: present(cameras, access.group.intervalSec, people.names), commandId });
   }
 
   if (!/^[0-9a-f-]{16,80}$/i.test(deviceId)) return json({ error: "Appareil invalide." }, 400);
@@ -72,12 +79,14 @@ export async function POST(request: Request, ctx: Ctx) {
     running: body?.running === true,
     intervalSec: isInterval(intervalSec) ? intervalSec : undefined,
     givenName: givenName || undefined,
+    userId: access.user.id,
     ack: Number(body?.ack) > 0 ? Number(body.ack) : undefined,
     nextAt: Number(body?.nextAt) > Date.now() ? Number(body.nextAt) : 0,
   });
   const cameras = await listLiveCameras(id);
+  const people = await groupPeople(id);
   return json({
-    cameras: present(cameras, access.group.intervalSec),
+    cameras: present(cameras, access.group.intervalSec, people.names),
     command: status.command,
     watch: status.watch,
   });

@@ -72,6 +72,7 @@ export type CameraRecord = {
   running: boolean;
   intervalSec: number;
   label: string;
+  userId?: string;
   command?: CameraCommand | null;
   ack?: number;
   nextAt?: number;
@@ -475,6 +476,7 @@ type LiveDevice = {
   running?: boolean;
   intervalSec?: number;
   label?: string;
+  userId?: string;
   ack?: number;
   nextAt?: number;
 };
@@ -523,6 +525,7 @@ function freshCameras(groupId: string, devices: LiveDevice[], maxAge: number): C
       running: item.running === true,
       intervalSec: item.intervalSec || 0,
       label: item.label || "",
+      userId: item.userId,
       ack: item.ack,
       nextAt: item.nextAt && item.nextAt > Date.now() ? item.nextAt : undefined,
     }));
@@ -568,7 +571,7 @@ export async function touchCamera(
   groupId: string,
   deviceId: string,
   phone: boolean,
-  status?: { camera?: boolean; running?: boolean; intervalSec?: number; givenName?: string; ack?: number; nextAt?: number },
+  status?: { camera?: boolean; running?: boolean; intervalSec?: number; givenName?: string; userId?: string; ack?: number; nextAt?: number },
 ): Promise<{ command: CameraCommand | null; watch: boolean }> {
   if (storageMode() === "file") {
     let command: CameraCommand | null = null;
@@ -585,6 +588,7 @@ export async function touchCamera(
         if (status?.intervalSec) current.intervalSec = status.intervalSec;
         if (status?.ack) current.ack = status.ack;
         current.nextAt = status?.running === false || !status?.nextAt ? undefined : status.nextAt;
+        if (status?.userId) current.userId = status.userId;
         if (phone && (status?.givenName || !current.label)) {
           current.label = phoneLabel(
             db.cameras
@@ -604,6 +608,7 @@ export async function touchCamera(
           running: status?.running === true,
           intervalSec: status?.intervalSec || 0,
           label: phone ? phoneLabel([], deviceId, status?.givenName) : "",
+          userId: status?.userId,
           nextAt: status?.running === false || !status?.nextAt ? undefined : status.nextAt,
         };
         db.cameras.push(current);
@@ -638,11 +643,12 @@ export async function touchCamera(
     current.running !== nextRunning ||
     (current.intervalSec || 0) !== nextInterval ||
     (current.label || "") !== nextLabel ||
+    (current.userId || "") !== (status?.userId || current?.userId || "") ||
     (status?.ack ? current.ack !== status.ack : false) ||
     (current.nextAt || 0) !== (status?.nextAt || 0) ||
     now - Date.parse(previousSeen) > 20_000;
   if (!current) {
-    current = { id: deviceId, seenAt, phone, label: nextLabel };
+    current = { id: deviceId, seenAt, phone, label: nextLabel, userId: status?.userId };
     state.devices.push(current);
   }
   current.seenAt = seenAt;
@@ -651,6 +657,7 @@ export async function touchCamera(
   current.running = nextRunning;
   current.intervalSec = nextInterval;
   current.label = nextLabel;
+  if (status?.userId) current.userId = status.userId;
   current.nextAt = nextRunning === false || !status?.nextAt ? undefined : status.nextAt;
   if (status?.ack) current.ack = status.ack;
   if (changed) await writeLive(groupId, { ...state, command: null, watch: null, seq: state.seq });
@@ -717,11 +724,25 @@ export async function listLiveCameras(groupId: string): Promise<CameraRecord[]> 
       running: item.running === true,
       intervalSec: item.intervalSec || 0,
       label: item.label || "",
+      userId: item.userId,
       ack: item.ack,
       nextAt: item.nextAt,
     })), 45_000));
   }
   return freshCameras(groupId, (await readLive(groupId)).devices, 45_000);
+}
+
+export function groupPeople(groupId: string): Promise<{ members: string[]; names: Record<string, string> }> {
+  return readThrough((db) => {
+    const names: Record<string, string> = {};
+    for (const user of db.users) names[user.id] = user.name;
+    const group = db.groups.find((item) => item.id === groupId);
+    if (!group) return { members: [], names };
+    const members = [...new Set(group.memberIds)]
+      .map((id) => names[id])
+      .filter((name): name is string => Boolean(name));
+    return { members, names };
+  });
 }
 
 export function loadGroupBundle(groupId: string): Promise<{

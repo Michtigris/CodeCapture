@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CHAT_PROMPT, DEFAULT_BRIEF, MAX_PHOTOS_PER_SEND } from "@/lib/constants";
 import { INSERT_DAY_MS, parseInsert } from "@/lib/insert";
-import type { GroupPayload, PublicUser } from "@/lib/types";
+import type { CameraDTO, GroupPayload, PublicUser } from "@/lib/types";
 import { CameraPane } from "./CameraPane";
 import { fileToJpeg } from "./images";
 import { copyPhotoSet, copyText } from "./copy";
@@ -15,6 +15,27 @@ import { formatWhen } from "./format";
 import { Toast, useToast } from "./toast";
 import { TipButton } from "./TipButton";
 import { TopBar } from "./TopBar";
+
+function phoneOwner(camera: CameraDTO, members: string[]) {
+  if (camera.ownerName) return camera.ownerName;
+  const raw = camera.label.replace(/^Téléphone\s+/i, "").replace(/\s+\d+$/, "").trim();
+  const matches = members.filter((name) => name.split(/\s+/)[0]?.toLowerCase() === raw.toLowerCase());
+  if (matches.length === 1) return matches[0];
+  return camera.label || "Téléphone";
+}
+
+function rosterRows(members: string[], cameras: CameraDTO[]) {
+  const rows = members.map((name) => ({ name, phone: false }));
+  for (const camera of cameras) {
+    if (camera.phone === false) continue;
+    rows.push({ name: phoneOwner(camera, members), phone: true });
+  }
+  return rows.sort((a, b) => {
+    const left = a.phone ? `${a.name} [PHONE]` : a.name;
+    const right = b.phone ? `${b.name} [PHONE]` : b.name;
+    return left.localeCompare(right, "fr", { sensitivity: "base" });
+  });
+}
 
 function pasteKey(groupId: string) {
   return `cc_paste_${groupId}`;
@@ -66,6 +87,8 @@ export function Workspace({ groupId }: { groupId: string }) {
   const sendingRef = useRef(false);
   const [lotIndex, setLotIndex] = useState(0);
   const [nameLive, setNameLive] = useState(false);
+  const [rosterOpen, setRosterOpen] = useState(false);
+  const rosterRef = useRef<HTMLDivElement>(null);
   const [insertDot, setInsertDot] = useState<"idle" | "ok" | "bad" | "same">("idle");
   const [focusFile, setFocusFile] = useState<{ name: string; nonce: number } | null>(null);
   const insertLock = useRef(false);
@@ -225,6 +248,22 @@ export function Workspace({ groupId }: { groupId: string }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [openPhoto]);
+
+  useEffect(() => {
+    if (!rosterOpen) return;
+    function onPointer(event: PointerEvent) {
+      if (!rosterRef.current?.contains(event.target as Node)) setRosterOpen(false);
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setRosterOpen(false);
+    }
+    window.addEventListener("pointerdown", onPointer);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onPointer);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [rosterOpen]);
 
   async function patchGroup(body: Record<string, unknown>) {
     const res = await fetch(`/api/groups/${groupId}`, {
@@ -556,6 +595,34 @@ export function Workspace({ groupId }: { groupId: string }) {
               }}
             />
             {data.group.code ? <span className="group-code">{data.group.code}</span> : null}
+            <div className="roster" ref={rosterRef}>
+              <button
+                type="button"
+                className="roster-btn"
+                aria-expanded={rosterOpen}
+                aria-haspopup="listbox"
+                onClick={() => setRosterOpen((open) => !open)}
+              >
+                Membre
+                <span className="roster-caret" aria-hidden="true" />
+              </button>
+              {rosterOpen ? (
+                <div className="roster-pop shard" role="listbox" aria-label="Membres du groupe">
+                  <i className="tick tl" />
+                  <i className="tick tr" />
+                  <i className="tick bl" />
+                  <i className="tick br" />
+                  <ul>
+                    {rosterRows(data.members ?? [], data.cameras ?? []).map((row, index) => (
+                      <li key={`${row.phone ? "p" : "m"}-${index}-${row.name}`} role="option">
+                        {row.name}
+                        {row.phone ? <span className="roster-tag"> [PHONE]</span> : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
         <div className="group-actions">

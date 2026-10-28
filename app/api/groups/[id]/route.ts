@@ -1,7 +1,7 @@
 import { isInterval } from "@/lib/constants";
 import { json } from "@/lib/http";
 import { getCurrentUser } from "@/lib/session";
-import { getGroup, isMember, listLiveCameras, loadGroupBundle, pruneHistoryPhotos, rememberCopiedPhotos, updateGroup, deleteGroup } from "@/lib/store";
+import { getGroup, groupPeople, isMember, listLiveCameras, loadGroupBundle, pruneHistoryPhotos, rememberCopiedPhotos, updateGroup, deleteGroup } from "@/lib/store";
 import type { CaptureDTO, PhotoDTO } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -26,6 +26,7 @@ export async function GET(_request: Request, ctx: Ctx) {
   if (!bundle) return json({ error: "Groupe introuvable." }, 404);
   const { group, photos, captures } = bundle;
   const cameras = await listLiveCameras(group.id);
+  const people = await groupPeople(group.id);
   const photoDTOs: PhotoDTO[] = photos.map((photo) => ({
     id: photo.id,
     createdAt: photo.createdAt,
@@ -52,6 +53,7 @@ export async function GET(_request: Request, ctx: Ctx) {
     },
     photos: photoDTOs,
     captures: captureDTOs,
+    members: people.members,
     cameras: cameras.map((camera) => ({
       deviceId: camera.deviceId,
       seenAt: camera.seenAt,
@@ -60,6 +62,7 @@ export async function GET(_request: Request, ctx: Ctx) {
       running: camera.running === true,
       intervalSec: camera.intervalSec || group.intervalSec,
       label: camera.label || (camera.phone !== false ? "Téléphone" : "Ordinateur"),
+      ownerName: camera.userId ? people.names[camera.userId] || "" : "",
       ack: camera.ack || 0,
       nextAt: camera.nextAt && camera.nextAt > Date.now() ? camera.nextAt : 0,
     })),

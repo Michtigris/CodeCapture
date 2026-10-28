@@ -40,6 +40,7 @@ export type CameraDTO = {
   running: boolean;
   intervalSec: number;
   label: string;
+  ownerName?: string;
   ack?: number;
   nextAt?: number;
 };
@@ -49,6 +50,7 @@ export type GroupPayload = {
   photos: PhotoDTO[];
   captures: CaptureDTO[];
   cameras: CameraDTO[];
+  members: string[];
 };
 
 export type GroupSummary = GroupDTO & {
