@@ -204,6 +204,15 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
   text-align: center;
 }
 .qr-card p { margin: 0; max-width: 34ch; }
+.ask {
+  width: min(100%, 360px);
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+}
+.ask p { margin: 0; font-size: 20px; letter-spacing: -0.03em; }
 .qr-frame { display: inline-block; }
 .qr-frame .qr-mark { width: min(420px, 78vw); padding: 16px; }
 
