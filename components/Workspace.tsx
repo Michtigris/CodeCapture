@@ -666,8 +666,7 @@ export function Workspace({ groupId }: { groupId: string }) {
             disabled={!data.photos.some((photo) => !photo.captureId)}
             onClick={() => {
               const waiting = data.photos.filter((photo) => !photo.captureId);
-              const shots = waiting.slice(-8);
-              void copyPhotoSet(shots.map((photo) => ({ id: photo.id, url: photo.url })))
+              void copyPhotoSet(waiting.map((photo) => ({ id: photo.id, url: photo.url })))
                 .then(async (ids) => {
                   const res = await fetch(`/api/groups/${groupId}`, {
                     method: "PATCH",

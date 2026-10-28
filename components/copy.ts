@@ -15,50 +15,65 @@ export async function copyText(text: string) {
   }
 }
 
+function imageExt(type: string) {
+  if (type.includes("png")) return "png";
+  if (type.includes("webp")) return "webp";
+  return "jpg";
+}
+
+async function writeSeparatePhotos(files: File[]) {
+  if (files.length === 1 && navigator.clipboard?.write) {
+    try {
+      const file = files[0];
+      const type = file.type === "image/png" || file.type === "image/jpeg" ? file.type : "image/png";
+      await navigator.clipboard.write([new ClipboardItem({ [type]: file })]);
+      return;
+    } catch {
+      /* Le format n'est pas accepté : on copie le fichier tel quel. */
+    }
+  }
+  await new Promise<void>((resolve, reject) => {
+    const onCopy = (event: ClipboardEvent) => {
+      const data = event.clipboardData;
+      if (!data) {
+        reject(new Error("Copie impossible."));
+        return;
+      }
+      event.preventDefault();
+      let added = 0;
+      for (const file of files) {
+        if (data.items.add(file)) added += 1;
+      }
+      if (added !== files.length) {
+        reject(new Error("Copie impossible."));
+        return;
+      }
+      resolve();
+    };
+    document.addEventListener("copy", onCopy, { once: true });
+    const ok = document.execCommand("copy");
+    if (!ok) {
+      document.removeEventListener("copy", onCopy);
+      reject(new Error("Ce navigateur ne copie pas plusieurs images."));
+    }
+  });
+}
+
 export async function copyPhotoSet(shots: { id: string; url: string }[]): Promise<string[]> {
   if (!shots.length) throw new Error("Aucune photo à copier.");
-  if (!navigator.clipboard?.write) throw new Error("Ce navigateur ne copie pas les images.");
+  const files: File[] = [];
   const copied: string[] = [];
-  const png = (async () => {
-    const bitmaps: ImageBitmap[] = [];
-    for (const shot of shots.slice(0, 8)) {
-      const res = await fetch(shot.url);
-      if (!res.ok) continue;
-      bitmaps.push(await createImageBitmap(await res.blob()));
-      copied.push(shot.id);
-    }
-    if (!bitmaps.length) throw new Error("Photos introuvables.");
-    const maxSide = 16384;
-    const gap = 18;
-    const nativeWidth = bitmaps.reduce((max, bitmap) => Math.max(max, bitmap.width), 1);
-    const nativeHeight = bitmaps.reduce((sum, bitmap) => sum + bitmap.height, 0) + gap * Math.max(0, bitmaps.length - 1);
-    const scale = Math.min(1, maxSide / nativeWidth, maxSide / nativeHeight);
-    const sizes = bitmaps.map((bitmap) => ({
-      w: Math.max(1, Math.round(bitmap.width * scale)),
-      h: Math.max(1, Math.round(bitmap.height * scale)),
-    }));
-    const gapPx = Math.round(gap * scale);
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(nativeWidth * scale));
-    canvas.height = sizes.reduce((sum, size) => sum + size.h, 0) + gapPx * Math.max(0, sizes.length - 1);
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Copie impossible.");
-    ctx.imageSmoothingEnabled = scale < 1;
-    ctx.imageSmoothingQuality = "high";
-    ctx.fillStyle = "#11140f";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    let y = 0;
-    bitmaps.forEach((bitmap, index) => {
-      ctx.drawImage(bitmap, 0, y, sizes[index].w, sizes[index].h);
-      y += sizes[index].h + gapPx;
-      bitmap.close();
-    });
-    const blob = await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob((value) => (value ? resolve(value) : reject(new Error("Copie impossible."))), "image/png");
-    });
-    return blob;
-  })();
-  await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+  for (let index = 0; index < shots.length; index += 1) {
+    const shot = shots[index];
+    const res = await fetch(shot.url);
+    if (!res.ok) continue;
+    const blob = await res.blob();
+    const type = blob.type.startsWith("image/") ? blob.type : "image/jpeg";
+    files.push(new File([blob], `photo-${index + 1}.${imageExt(type)}`, { type }));
+    copied.push(shot.id);
+  }
+  if (!files.length) throw new Error("Photos introuvables.");
+  await writeSeparatePhotos(files);
   return copied;
 }
 
