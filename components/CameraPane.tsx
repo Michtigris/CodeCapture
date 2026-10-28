@@ -6,7 +6,7 @@ import type { CameraDTO } from "@/lib/types";
 import { deviceId, readCameraChoice, readPcCameras, writeCameraChoice, writePcCameras, type PcCamera } from "./device";
 import { formatRemain } from "./format";
 import { frameFromVideo, frameMatchingView } from "./images";
-import { clampZoom, detectTarget, frameAtZoom, frameOnTarget, FULL, pageShift, placeVideo, smoothLock, type NormRect } from "./targetLock";
+import { clampZoom, detectTarget, frameAtZoom, frameOnTarget, FULL, medianRect, pageShift, placeVideo, smoothLock, type NormRect } from "./targetLock";
 import { TipButton } from "./TipButton";
 
 type Props = {
@@ -584,6 +584,8 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     sample.height = 72;
     const ctx = sample.getContext("2d", { willReadFrequently: true });
     let lock: NormRect | null = null;
+    let recent: NormRect[] = [];
+    let fullHits = 0;
     let misses = 0;
     let shown = 1;
     let stopped = false;
@@ -596,6 +598,8 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
         if (resetLockRef.current) {
           resetLockRef.current = false;
           lock = null;
+          recent = [];
+          fullHits = 0;
           misses = 0;
         }
         ctx.drawImage(video, 0, 0, sample.width, sample.height);
@@ -621,22 +625,44 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
         let base = FULL;
         if (followRef.current) {
           const found = detectTarget(pixels);
-          if (found) {
+          const filled = !!found && found.w > 0.97 && found.h > 0.97;
+          if (found && !filled) {
+            fullHits = 0;
             misses = 0;
-            lock = smoothLock(lock, found);
+            recent.push(found);
+            if (recent.length > 5) recent.shift();
+            lock = smoothLock(lock, recent.length >= 3 ? medianRect(recent) : found);
+          } else if (filled) {
+            misses = 0;
+            fullHits += 1;
+            if (fullHits >= 5) {
+              recent = [];
+              lock = smoothLock(lock, FULL);
+            }
           } else {
+            fullHits = 0;
             misses += 1;
-            lock = misses > 10 ? smoothLock(lock, FULL) : lock;
+            if (misses > 36) {
+              recent = [];
+              lock = smoothLock(lock, FULL);
+            }
           }
           base = lock ?? FULL;
         } else {
           lock = null;
+          recent = [];
+          fullHits = 0;
           misses = 0;
         }
         const desk = wideRef.current;
         const zoom = zoomRef.current;
-        const aimed = !desk && followRef.current && base.w < 0.98 && base.h < 0.98;
-        const crop = aimed ? frameOnTarget(base, zoom) : frameAtZoom(zoom);
+        const guided = frameOnTarget(base, zoom);
+        const plain = frameAtZoom(zoom);
+        const shifted =
+          Math.abs(guided.x - plain.x) + Math.abs(guided.y - plain.y) > 0.03 ||
+          Math.abs(guided.w - plain.w) + Math.abs(guided.h - plain.h) > 0.05;
+        const aimed = !desk && followRef.current && shifted;
+        const crop = aimed ? guided : plain;
         cropRef.current = crop;
         if (desk) {
           video.style.width = "100%";
@@ -650,7 +676,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
         } else {
           placeVideo(video, finder, crop, facingRef.current === "user");
         }
-        const effective = desk ? zoom : 1 / crop.w;
+        const effective = desk ? zoom : Math.max(1 / crop.w, 1 / crop.h);
         if (Math.abs(effective - shown) > 0.04) {
           shown = effective;
           setViewMag(effective);
