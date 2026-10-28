@@ -216,8 +216,21 @@ a.ghost { display: inline-flex; align-items: center; justify-content: center; te
   border: 1px solid var(--line);
 }
 .ask p { margin: 0; font-size: 20px; letter-spacing: -0.03em; }
+.ask .row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  flex-wrap: nowrap;
+}
 .ask .row > .cp,
-.ask .row > .cp-line { flex: 1 1 0; min-width: 0; }
+.ask .row > .cp-line {
+  width: 100%;
+  min-width: 0;
+  padding-left: 10px;
+  padding-right: 10px;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+}
 .qr-frame { display: inline-block; }
 .qr-frame .qr-mark { width: min(420px, 78vw); padding: 16px; }
 
