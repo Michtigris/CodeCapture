@@ -1,10 +1,12 @@
+export const AUTO_INTERVAL = -1;
+
 export const INTERVALS = [
   { sec: 15, label: "15 secondes" },
   { sec: 30, label: "30 secondes" },
   { sec: 60, label: "1 minute" },
   { sec: 120, label: "2 minutes" },
   { sec: 300, label: "5 minutes" },
-  { sec: 600, label: "10 minutes" },
+  { sec: AUTO_INTERVAL, label: "Auto" },
 ] as const;
 
 export const MODELS = [
@@ -61,8 +63,12 @@ echo "ok";
 <?php
 function diviser(int $a, int $b) { return $a / $b; }`;
 
+export function isAutoInterval(sec: number) {
+  return sec === AUTO_INTERVAL || sec === 600;
+}
+
 export function isInterval(sec: number): boolean {
-  return INTERVALS.some((item) => item.sec === sec);
+  return INTERVALS.some((item) => item.sec === sec) || sec === 600;
 }
 
 export function isModel(value: string): boolean {

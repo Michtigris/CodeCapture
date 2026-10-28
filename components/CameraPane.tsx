@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { INTERVALS } from "@/lib/constants";
+import { AUTO_INTERVAL, INTERVALS, isAutoInterval } from "@/lib/constants";
 import type { CameraDTO } from "@/lib/types";
 import { deviceId, readCameraChoice, readPcCameras, writeCameraChoice, writePcCameras, type PcCamera } from "./device";
 import { formatRemain } from "./format";
 import { frameFromVideo, frameMatchingView } from "./images";
-import { clampZoom, detectTarget, frameAtZoom, frameOnTarget, FULL, placeVideo, smoothLock, type NormRect } from "./targetLock";
+import { clampZoom, detectTarget, frameAtZoom, frameOnTarget, FULL, pageShift, placeVideo, smoothLock, type NormRect } from "./targetLock";
 import { TipButton } from "./TipButton";
 
 type Props = {
@@ -67,6 +67,10 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   const nextAtRef = useRef<number | null>(null);
   const resetLockRef = useRef(false);
   const holdBoxRef = useRef(false);
+  const intervalRef = useRef(intervalSec);
+  const baselineRef = useRef<Uint8Array | null>(null);
+  const changeStampRef = useRef(0);
+  intervalRef.current = ownInterval;
   const facingRef = useRef(facing);
   const enableRef = useRef(enableCamera);
 
@@ -192,6 +196,64 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     if (!running) {
       setNextAt(null);
       return;
+    }
+    if (isAutoInterval(ownInterval)) {
+      leadRef.current = false;
+      baselineRef.current = null;
+      changeStampRef.current = 0;
+      let cancelled = false;
+      let timer = 0;
+      let lastShot = Date.now();
+      let shown = 0;
+      const plan = () => {
+        const now = Date.now();
+        const stamp = changeStampRef.current;
+        const idleAt = lastShot + 180_000;
+        const due = stamp > lastShot ? Math.min(idleAt, stamp + 15_000) : idleAt;
+        if (Math.abs(due - shown) > 400) {
+          shown = due;
+          setNextAt(due);
+        }
+        return due - now;
+      };
+      const tick = () => {
+        if (cancelled) return;
+        if (document.hidden) {
+          timer = window.setTimeout(tick, 1000);
+          return;
+        }
+        if (plan() > 40) {
+          timer = window.setTimeout(tick, 200);
+          return;
+        }
+        timer = window.setTimeout(async () => {
+          if (cancelled || document.hidden) {
+            tick();
+            return;
+          }
+          try {
+            await shootRef.current();
+            lastError.current = "";
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Photo impossible.";
+            if (lastError.current !== message) {
+              lastError.current = message;
+              onToastRef.current(message);
+            }
+          }
+          if (cancelled) return;
+          lastShot = Date.now();
+          changeStampRef.current = 0;
+          baselineRef.current = null;
+          shown = 0;
+          tick();
+        }, 0);
+      };
+      tick();
+      return () => {
+        cancelled = true;
+        window.clearTimeout(timer);
+      };
     }
     let cancelled = false;
     let timer = 0;
@@ -451,17 +513,23 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
 
     const tick = (time: number) => {
       if (stopped) return;
-        if (time - last > 120 && video.videoWidth && ctx && !holdBoxRef.current) {
+      if (time - last > 120 && video.videoWidth && ctx && !holdBoxRef.current) {
         last = time;
         if (resetLockRef.current) {
           resetLockRef.current = false;
           lock = null;
           misses = 0;
         }
+        ctx.drawImage(video, 0, 0, sample.width, sample.height);
+        const pixels = ctx.getImageData(0, 0, sample.width, sample.height);
+        if (runningRef.current && isAutoInterval(intervalRef.current)) {
+          const seen = pageShift(baselineRef.current, pixels);
+          if (!baselineRef.current) baselineRef.current = seen.gray;
+          else if (seen.ratio >= 0.25 && changeStampRef.current === 0) changeStampRef.current = Date.now();
+        }
         let base = FULL;
         if (followRef.current) {
-          ctx.drawImage(video, 0, 0, sample.width, sample.height);
-          const found = detectTarget(ctx.getImageData(0, 0, sample.width, sample.height));
+          const found = detectTarget(pixels);
           if (found) {
             misses = 0;
             lock = smoothLock(lock, found);
@@ -786,7 +854,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
           <span>{wide && !usingDesk ? "Une photo toutes les, pour l'appareil choisi" : "Une photo toutes les"}</span>
           <select
             className={pending?.action === "interval" ? "armed" : ""}
-            value={String(wide && !usingDesk ? selected?.intervalSec || intervalSec : ownInterval)}
+            value={String(listedInterval(wide && !usingDesk ? selected?.intervalSec || intervalSec : ownInterval))}
             disabled={wide && !usingDesk && !selected}
             onChange={(event) => {
               const seconds = Number(event.target.value);
@@ -946,6 +1014,10 @@ function nativeZoomFor(slider: number, range: ZoomRange): number {
   if (!range.step || range.step <= 0) return clamped;
   const steps = Math.round((clamped - range.min) / range.step);
   return Math.min(range.max, Math.max(range.min, range.min + steps * range.step));
+}
+
+function listedInterval(sec: number) {
+  return sec === 600 ? AUTO_INTERVAL : sec;
 }
 
 function releaseVideoBox(video: HTMLVideoElement) {
