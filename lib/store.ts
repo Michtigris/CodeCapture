@@ -782,6 +782,31 @@ export function getGroupByCode(code: string): Promise<GroupRecord | null> {
   return readThrough((db) => db.groups.find((group) => group.code === wanted) ?? null);
 }
 
+export type GroupInvitePreview = {
+  code: string;
+  name: string;
+  creatorName: string;
+  memberCount: number;
+  createdAt: string;
+};
+
+export function previewGroupByCode(code: string): Promise<GroupInvitePreview | null> {
+  const wanted = code.trim().toUpperCase();
+  if (!/^[A-Z]{5}$/.test(wanted)) return Promise.resolve(null);
+  return readThrough((db) => {
+    const group = db.groups.find((item) => item.code === wanted);
+    if (!group) return null;
+    const creator = db.users.find((user) => user.id === group.userId);
+    return {
+      code: group.code,
+      name: group.name,
+      creatorName: creator?.name || "quelqu’un",
+      memberCount: Math.max(1, group.memberIds?.length || 1),
+      createdAt: group.createdAt,
+    };
+  });
+}
+
 export function joinGroup(userId: string, code: string): Promise<GroupRecord | null> {
   const wanted = code.trim().toUpperCase();
   if (!/^[A-Z]{5}$/.test(wanted)) return Promise.resolve(null);

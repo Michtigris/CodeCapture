@@ -22,11 +22,16 @@ export function AuthScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("mode") === "register") setMode("register");
+    const next = params.get("next") || "";
+    const match = next.match(/^\/([A-Za-z]{5})$/);
+    if (match) setInviteCode(match[1].toUpperCase());
     const enter = () => {
-      const next = new URLSearchParams(window.location.search).get("next");
-      location.href = safeNext(next);
+      location.href = safeNext(params.get("next"));
     };
     fetch("/api/auth/me", { cache: "no-store" })
       .then(async (res) => {
@@ -171,7 +176,9 @@ export function AuthScreen() {
         <p className="muted">
           {mode === "forgot"
             ? "Entre l’email et le prénom du compte, écrits comme à l’inscription. Un email t’envoie le lien pour en choisir un nouveau."
-            : "Le même compte relie le téléphone et l’ordinateur."}
+            : inviteCode
+              ? `Après ça, tu rejoins le groupe ${inviteCode} et tu y arrives directement.`
+              : "Le même compte relie le téléphone et l’ordinateur."}
         </p>
         {sent ? (
           <p className="hint">{sent}</p>

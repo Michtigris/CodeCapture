@@ -7,8 +7,8 @@ export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const pinPath = pathname.match(/^\/([a-zA-Z]{5})$/);
   if (pinPath && !session) {
-    const url = new URL("/", req.url);
-    url.searchParams.set("next", `/${pinPath[1].toUpperCase()}`);
+    const url = new URL("/invite", req.url);
+    url.searchParams.set("c", pinPath[1].toUpperCase());
     return NextResponse.redirect(url);
   }
 
@@ -33,5 +33,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/groupes", "/groupes/:path*", "/groupe/:path*", "/reglages", "/reglages/:path*", "/join", "/:pin"],
+  matcher: ["/", "/groupes", "/groupes/:path*", "/groupe/:path*", "/reglages", "/reglages/:path*", "/join", "/invite", "/:pin"],
 };
