@@ -1,6 +1,6 @@
-import { downloadBlob, zipBlobs } from "./zip";
+import { downloadBlob } from "./zip";
 
-const PHOTO_ZIP_NAME = "CodeCapture-photos.zip";
+const PHOTO_PDF_NAME = "CodeCapture-photos.pdf";
 
 export async function copyText(text: string) {
   try {
@@ -19,28 +19,24 @@ export async function copyText(text: string) {
   }
 }
 
-function imageExt(type: string) {
-  if (type.includes("png")) return "png";
-  if (type.includes("webp")) return "webp";
-  return "jpg";
-}
-
-async function saveZip(blob: Blob) {
+async function savePdf(blob: Blob) {
   const picker = (window as Window & {
     showSaveFilePicker?: (options?: {
       suggestedName?: string;
       types?: { description: string; accept: Record<string, string[]> }[];
-    }) => Promise<{ createWritable: () => Promise<{ write: (data: Blob) => Promise<void>; close: () => Promise<void> }> }>;
+    }) => Promise<{
+      createWritable: () => Promise<{ write: (data: Blob) => Promise<void>; close: () => Promise<void> }>;
+    }>;
   }).showSaveFilePicker;
 
   if (typeof picker === "function") {
     try {
       const handle = await picker({
-        suggestedName: PHOTO_ZIP_NAME,
+        suggestedName: PHOTO_PDF_NAME,
         types: [
           {
-            description: "Archive ZIP",
-            accept: { "application/zip": [".zip"] },
+            description: "PDF",
+            accept: { "application/pdf": [".pdf"] },
           },
         ],
       });
@@ -50,33 +46,24 @@ async function saveZip(blob: Blob) {
       return "saved" as const;
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") throw error;
-      /* Ancien Chrome / refus : téléchargement classique. */
     }
   }
-  downloadBlob(PHOTO_ZIP_NAME, blob);
+  downloadBlob(PHOTO_PDF_NAME, blob);
   return "downloaded" as const;
 }
 
-export async function copyPhotoSet(shots: { id: string; url: string }[]): Promise<{
+export async function exportPhotoPdf(groupId: string): Promise<{
   ids: string[];
   mode: "saved" | "downloaded";
 }> {
-  if (!shots.length) throw new Error("Aucune photo à exporter.");
-  const files: { name: string; data: Uint8Array }[] = [];
-  const ids: string[] = [];
-  for (let index = 0; index < shots.length; index += 1) {
-    const shot = shots[index];
-    const res = await fetch(shot.url);
-    if (!res.ok) continue;
-    const blob = await res.blob();
-    const type = blob.type.startsWith("image/") ? blob.type : "image/jpeg";
-    const data = new Uint8Array(await blob.arrayBuffer());
-    const pad = String(index + 1).padStart(2, "0");
-    files.push({ name: `photo-${pad}.${imageExt(type)}`, data });
-    ids.push(shot.id);
+  const res = await fetch(`/api/groups/${groupId}/packet`);
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({}));
+    throw new Error(payload.error || "PDF impossible.");
   }
-  if (!files.length) throw new Error("Photos introuvables.");
-  const mode = await saveZip(zipBlobs(files));
+  const ids = (res.headers.get("X-Photo-Ids") || "").split(",").filter(Boolean);
+  const blob = await res.blob();
+  const mode = await savePdf(blob);
   return { ids, mode };
 }
 

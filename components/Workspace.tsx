@@ -7,7 +7,7 @@ import { INSERT_DAY_MS, parseInsert } from "@/lib/insert";
 import type { CameraDTO, GroupPayload, PublicUser } from "@/lib/types";
 import { CameraPane } from "./CameraPane";
 import { fileToJpeg } from "./images";
-import { copyPhotoSet, copyText } from "./copy";
+import { copyText, exportPhotoPdf } from "./copy";
 import { deviceId } from "./device";
 import { FileStage } from "./FileStage";
 import { QrMark } from "./QrMark";
@@ -665,8 +665,7 @@ export function Workspace({ groupId }: { groupId: string }) {
             className="lime"
             disabled={!data.photos.some((photo) => !photo.captureId)}
             onClick={() => {
-              const waiting = data.photos.filter((photo) => !photo.captureId);
-              void copyPhotoSet(waiting.map((photo) => ({ id: photo.id, url: photo.url })))
+              void exportPhotoPdf(groupId)
                 .then(async ({ ids, mode }) => {
                   const res = await fetch(`/api/groups/${groupId}`, {
                     method: "PATCH",
@@ -674,13 +673,13 @@ export function Workspace({ groupId }: { groupId: string }) {
                     body: JSON.stringify({ copiedIds: ids }),
                   });
                   if (!res.ok) {
-                    toast("Fichier prêt, mais le lot n'a pas été noté.");
+                    toast("PDF prêt, mais le lot n'a pas été noté.");
                     return;
                   }
                   toast(
                     mode === "saved"
-                      ? `${ids.length} photo${ids.length > 1 ? "s" : ""} dans CodeCapture-photos.zip`
-                      : `${ids.length} photo${ids.length > 1 ? "s" : ""} téléchargées (CodeCapture-photos.zip)`,
+                      ? `${ids.length} photo${ids.length > 1 ? "s" : ""} dans CodeCapture-photos.pdf`
+                      : `${ids.length} photo${ids.length > 1 ? "s" : ""} exportées (CodeCapture-photos.pdf)`,
                   );
                   await reload();
                 })
@@ -690,7 +689,7 @@ export function Workspace({ groupId }: { groupId: string }) {
                 });
             }}
           >
-            Télécharger les photos
+            Exporter les photos
           </button>
           <span className="insert-pair">
             <button type="button" className="ghost" onClick={() => void insertClipboard()}>
