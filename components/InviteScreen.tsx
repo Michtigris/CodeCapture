@@ -20,13 +20,22 @@ export function InviteScreen({ invite, code }: Props) {
 
   if (!invite) {
     return (
-      <main className="gate invite-gate">
-        <p className="landing-brand">
+      <main className="invite-cyber">
+        <div className="invite-fx" aria-hidden="true">
+          <div className="invite-grid" />
+          <div className="invite-scan" />
+          <div className="invite-glow" />
+        </div>
+        <p className="landing-brand invite-brand">
           <Mark />
           CodeCapture
         </p>
-        <section className="invite-card">
-          <p className="kicker">Invitation</p>
+        <section className="invite-panel shard">
+          <i className="tick tl" />
+          <i className="tick tr" />
+          <i className="tick bl" />
+          <i className="tick br" />
+          <p className="kicker">Signal perdu</p>
           <h1>Lien introuvable</h1>
           <p className="lede">
             Ce code ne correspond à aucun groupe. Vérifie le lien, ou demande un nouveau QR au créateur.
@@ -42,33 +51,53 @@ export function InviteScreen({ invite, code }: Props) {
   }
 
   const created = whenFr(invite.createdAt);
+  const online = invite.memberOnline;
+  const total = invite.memberCount;
 
   return (
-    <main className="gate invite-gate">
-      <p className="landing-brand">
+    <main className="invite-cyber">
+      <div className="invite-fx" aria-hidden="true">
+        <div className="invite-grid" />
+        <div className="invite-scan" />
+        <div className="invite-glow" />
+        <p className="invite-watermark">{invite.code}</p>
+      </div>
+      <p className="landing-brand invite-brand">
         <Mark />
         CodeCapture
       </p>
-      <section className="invite-card">
-        <p className="kicker">Invitation</p>
+      <section className="invite-panel shard">
+        <i className="tick tl" />
+        <i className="tick tr" />
+        <i className="tick bl" />
+        <i className="tick br" />
+        <div className="invite-rail">
+          <p className="kicker">Invitation · accès groupe</p>
+          <span className={["invite-live", online > 0 ? "on" : ""].filter(Boolean).join(" ")}>
+            <i />
+            {online > 0 ? "Canal actif" : "Canal en veille"}
+          </span>
+        </div>
         <h1>{invite.name}</h1>
         <p className="lede">
-          Tu es sur le point d’entrer dans ce groupe. Connecte-toi ou crée un compte : le groupe s’ajoute ensuite à ta
-          liste, et tu arrives directement dedans.
+          Connecte-toi ou crée un compte : le groupe s’ajoute à ta liste, et tu arrives directement dedans.
         </p>
+        <div className="invite-code-block" aria-label={`Code ${invite.code}`}>
+          <span>CODE</span>
+          <strong className="group-code">{invite.code}</strong>
+        </div>
         <dl className="invite-facts">
           <div>
-            <dt>Code</dt>
-            <dd className="group-code">{invite.code}</dd>
-          </div>
-          <div>
             <dt>Créé par</dt>
-            <dd>{invite.creatorName}</dd>
+            <dd className="invite-creator">{invite.creatorName}</dd>
           </div>
           <div>
             <dt>Membres</dt>
             <dd>
-              {invite.memberCount} personne{invite.memberCount > 1 ? "s" : ""}
+              <span className="invite-ratio">
+                {online}/{total}
+              </span>
+              <span className="invite-ratio-hint">connectés / connus</span>
             </dd>
           </div>
           {created ? (
@@ -77,6 +106,10 @@ export function InviteScreen({ invite, code }: Props) {
               <dd>{created}</dd>
             </div>
           ) : null}
+          <div>
+            <dt>Statut</dt>
+            <dd>{online > 0 ? `${online} en ligne maintenant` : "Personne en ligne pour l’instant"}</dd>
+          </div>
         </dl>
         <div className="invite-actions">
           <Link className="lime" href={loginHref}>

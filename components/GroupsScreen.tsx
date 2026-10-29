@@ -161,7 +161,9 @@ export function GroupsScreen() {
           </div>
           <div>
             <dt>Membres</dt>
-            <dd>{group.memberCount}</dd>
+            <dd>
+              {group.memberOnline}/{group.memberCount}
+            </dd>
           </div>
           <div>
             <dt>Fichiers</dt>

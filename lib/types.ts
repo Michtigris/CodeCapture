@@ -69,6 +69,7 @@ export type GroupSummary = GroupDTO & {
   pendingCount: number;
   fileCount: number;
   memberCount: number;
+  memberOnline: number;
   creatorName: string;
   lastCaptureAt: string | null;
   owner: boolean;

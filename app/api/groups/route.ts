@@ -1,6 +1,6 @@
 import { json } from "@/lib/http";
 import { getCurrentUser } from "@/lib/session";
-import { countForGroups, createGroup, memberGate } from "@/lib/store";
+import { countForGroups, createGroup, listMembers, memberGate } from "@/lib/store";
 import type { GroupSummary } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -10,35 +10,47 @@ export async function GET() {
   const user = await getCurrentUser();
   if (!user) return json({ error: "Connexion requise." }, 401);
   const snap = await countForGroups(user.id);
-  const groups: GroupSummary[] = snap.groups
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-    .map((group) => {
-      const photos = snap.photos.filter((photo) => photo.groupId === group.id);
-      const captures = snap.captures
-        .filter((capture) => capture.groupId === group.id)
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-      const latest = captures[0];
-      const gate = memberGate(group, user.id);
+  const ordered = snap.groups.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const presence = await Promise.all(
+    ordered.map(async (group) => {
+      const members = await listMembers(group.id);
       return {
         id: group.id,
-        name: group.name,
-        code: group.code,
-        brief: group.brief,
-        intervalSec: group.intervalSec,
-        createdAt: group.createdAt,
-        copiedIds: group.copiedIds ?? [],
-        photoCount: photos.length,
-        pendingCount: photos.filter((photo) => !photo.captureId).length,
-        fileCount: latest?.files.filter((file) => !file.archivedAt).length ?? 0,
-        memberCount: new Set(group.memberIds).size,
-        creatorName: snap.names[group.userId] || "Inconnu",
-        lastCaptureAt: latest?.createdAt ?? null,
-        owner: group.userId === user.id,
-        lookOnly: false,
-        access: gate.ok ? "ok" : gate.reason === "banned" ? "banned" : "kicked",
-        kickUntil: gate.until ?? 0,
+        total: Math.max(1, members.length),
+        online: members.filter((row) => row.online).length,
       };
-    });
+    }),
+  );
+  const byId = new Map(presence.map((row) => [row.id, row]));
+  const groups: GroupSummary[] = ordered.map((group) => {
+    const photos = snap.photos.filter((photo) => photo.groupId === group.id);
+    const captures = snap.captures
+      .filter((capture) => capture.groupId === group.id)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const latest = captures[0];
+    const gate = memberGate(group, user.id);
+    const members = byId.get(group.id);
+    return {
+      id: group.id,
+      name: group.name,
+      code: group.code,
+      brief: group.brief,
+      intervalSec: group.intervalSec,
+      createdAt: group.createdAt,
+      copiedIds: group.copiedIds ?? [],
+      photoCount: photos.length,
+      pendingCount: photos.filter((photo) => !photo.captureId).length,
+      fileCount: latest?.files.filter((file) => !file.archivedAt).length ?? 0,
+      memberCount: members?.total ?? Math.max(1, new Set(group.memberIds).size),
+      memberOnline: members?.online ?? 0,
+      creatorName: snap.names[group.userId] || "Inconnu",
+      lastCaptureAt: latest?.createdAt ?? null,
+      owner: group.userId === user.id,
+      lookOnly: false,
+      access: gate.ok ? "ok" : gate.reason === "banned" ? "banned" : "kicked",
+      kickUntil: gate.until ?? 0,
+    };
+  });
   return json({ groups });
 }
 

@@ -622,7 +622,7 @@ export function Workspace({ groupId }: { groupId: string }) {
                 aria-haspopup="listbox"
                 onClick={() => setRosterOpen((open) => !open)}
               >
-                Membre
+                Membre {(data.members ?? []).filter((row) => row.online).length}/{(data.members ?? []).length || 1}
                 <span className="roster-caret" aria-hidden="true" />
               </button>
               {rosterOpen ? (

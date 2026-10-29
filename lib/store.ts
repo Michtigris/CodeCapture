@@ -915,24 +915,25 @@ export type GroupInvitePreview = {
   name: string;
   creatorName: string;
   memberCount: number;
+  memberOnline: number;
   createdAt: string;
 };
 
-export function previewGroupByCode(code: string): Promise<GroupInvitePreview | null> {
+export async function previewGroupByCode(code: string): Promise<GroupInvitePreview | null> {
   const wanted = code.trim().toUpperCase();
-  if (!/^[A-Z]{5}$/.test(wanted)) return Promise.resolve(null);
-  return readThrough((db) => {
-    const group = db.groups.find((item) => item.code === wanted);
-    if (!group) return null;
-    const creator = db.users.find((user) => user.id === group.userId);
-    return {
-      code: group.code,
-      name: group.name,
-      creatorName: creator?.name || "quelqu’un",
-      memberCount: Math.max(1, group.memberIds?.length || 1),
-      createdAt: group.createdAt,
-    };
-  });
+  if (!/^[A-Z]{5}$/.test(wanted)) return null;
+  const group = await getGroupByCode(wanted);
+  if (!group) return null;
+  const members = await listMembers(group.id);
+  const creator = members.find((row) => row.owner);
+  return {
+    code: group.code,
+    name: group.name,
+    creatorName: creator?.name || "quelqu’un",
+    memberCount: Math.max(1, members.length),
+    memberOnline: members.filter((row) => row.online).length,
+    createdAt: group.createdAt,
+  };
 }
 
 export function joinGroup(
