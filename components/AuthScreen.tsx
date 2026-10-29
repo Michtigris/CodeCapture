@@ -7,10 +7,8 @@ import { Mark } from "./Mark";
 import { PasswordField } from "./PasswordField";
 
 const SAMPLE = `<?php
-
 class Animal {
     public string $nom;
-
     public function __construct(string $nom) {
         $this->nom = $nom;
     }
@@ -107,133 +105,128 @@ export function AuthScreen() {
   }
 
   return (
-    <main className="gate">
-      <p className="landing-brand">
+    <main className="landing-cyber">
+      <div className="invite-fx" aria-hidden="true">
+        <div className="invite-grid" />
+        <div className="invite-scan" />
+        <div className="invite-glow" />
+        <p className="invite-watermark landing-mark">CC</p>
+      </div>
+      <p className="landing-brand invite-brand">
         <Mark />
         CodeCapture
       </p>
       <div className="landing">
-      <section className="landing-copy">
-        <p className="kicker">Un compte. Deux écrans.</p>
-        <h1>
-          Photographie
-          <br />
-          le code.
-        </h1>
-        <p className="lede">
-          Tu ouvres un groupe. Le téléphone passe en mode caméra et prend une photo devant lui, à l’intervalle que tu
-          choisis. Les photos s’accumulent. Quand tu envoies la série à ChatGPT, l’agent reconstitue chaque fichier,
-          prêt à copier.
-        </p>
-        <ol className="steps">
-          <li>
-            <span className="num">1</span>
-            <p>
-              <strong>Même compte</strong>
-              Téléphone et ordinateur se connectent avec le même email.
-            </p>
-          </li>
-          <li>
-            <span className="num">2</span>
-            <p>
-              <strong>Un groupe</strong>
-              C’est la session de travail. Les deux écrans voient les mêmes photos.
-            </p>
-          </li>
-          <li>
-            <span className="num">3</span>
-            <p>
-              <strong>La série</strong>
-              Le téléphone photographie tout seul, toutes les x minutes.
-            </p>
-          </li>
-          <li>
-            <span className="num">4</span>
-            <p>
-              <strong>ChatGPT</strong>
-              Un clic envoie les dernières photos. L’agent connaît déjà la consigne : sortir les fichiers.
-            </p>
-          </li>
-          <li>
-            <span className="num">5</span>
-            <p>
-              <strong>Les onglets</strong>
-              animal.php, chat.php, ou un dossier. Clic droit sur le code pour tout copier.
-            </p>
-          </li>
-        </ol>
-        <div className="fake" aria-hidden="true">
-          <div className="tabs">
-            <span className="tab on">animal.php</span>
-            <span className="tab">chat.php</span>
+        <section className="landing-copy">
+          <p className="kicker">Un compte · deux écrans</p>
+          <h1>
+            Photographie
+            <br />
+            le code.
+          </h1>
+          <p className="lede">Téléphone qui capture. PC qui récupère les fichiers.</p>
+          <ul className="landing-signals">
+            <li>
+              <span>01</span>
+              Capture auto
+            </li>
+            <li>
+              <span>02</span>
+              Groupe partagé
+            </li>
+            <li>
+              <span>03</span>
+              Fichiers prêts
+            </li>
+          </ul>
+          <div className="fake shard" aria-hidden="true">
+            <i className="tick tl" />
+            <i className="tick tr" />
+            <i className="tick bl" />
+            <i className="tick br" />
+            <div className="tabs">
+              <span className="tab on">animal.php</span>
+              <span className="tab">chat.php</span>
+            </div>
+            <pre>{SAMPLE}</pre>
           </div>
-          <pre>{SAMPLE}</pre>
-          <p className="hint">Clic droit pour tout copier</p>
-        </div>
-      </section>
-      <section className="auth-card">
-        <h2>{mode === "login" ? "Connexion" : mode === "forgot" ? "Mot de passe oublié" : "Créer le compte"}</h2>
-        <p className="muted">
-          {mode === "forgot"
-            ? "Entre l’email et le prénom du compte, écrits comme à l’inscription. Un email t’envoie le lien pour en choisir un nouveau."
-            : inviteCode
-              ? `Après ça, tu rejoins le groupe ${inviteCode} et tu y arrives directement.`
-              : "Le même compte relie le téléphone et l’ordinateur."}
-        </p>
-        {sent ? (
-          <p className="hint">{sent}</p>
-        ) : (
-          <form className="form" onSubmit={onSubmit}>
-            {mode !== "login" ? (
+        </section>
+        <section className="auth-card shard">
+          <i className="tick tl" />
+          <i className="tick tr" />
+          <i className="tick bl" />
+          <i className="tick br" />
+          <p className="kicker">
+            {mode === "login" ? "Accès" : mode === "forgot" ? "Reset" : "Nouveau signal"}
+          </p>
+          <h2>{mode === "login" ? "Connexion" : mode === "forgot" ? "Mot de passe oublié" : "Créer le compte"}</h2>
+          <p className="muted">
+            {mode === "forgot"
+              ? "Email + prénom du compte. On t’envoie le lien."
+              : inviteCode
+                ? `Ensuite tu rejoins ${inviteCode}.`
+                : "Même compte sur téléphone et PC."}
+          </p>
+          {sent ? (
+            <p className="hint">{sent}</p>
+          ) : (
+            <form className="form" onSubmit={onSubmit}>
+              {mode !== "login" ? (
+                <label className="field">
+                  <span>Prénom</span>
+                  <input name="name" autoComplete="name" required maxLength={40} />
+                </label>
+              ) : null}
               <label className="field">
-                <span>Prénom</span>
-                <input name="name" autoComplete="name" required maxLength={40} />
+                <span>Email</span>
+                <input name="email" type="email" autoComplete="email" autoCapitalize="none" required />
               </label>
+              {mode === "forgot" ? null : (
+                <PasswordField
+                  label="Mot de passe"
+                  name="password"
+                  autoComplete={mode === "login" ? "current-password" : "new-password"}
+                />
+              )}
+              {error ? <p className="form-error">{error}</p> : null}
+              <button className="lime" type="submit" disabled={busy}>
+                {busy
+                  ? "Patiente…"
+                  : mode === "login"
+                    ? "Se connecter"
+                    : mode === "forgot"
+                      ? "Envoyer l’email"
+                      : "Créer le compte"}
+              </button>
+            </form>
+          )}
+          <p className="auth-links">
+            {mode === "login" ? (
+              <button
+                type="button"
+                className="switch-link"
+                onClick={() => {
+                  setMode("forgot");
+                  setError("");
+                  setSent("");
+                }}
+              >
+                Mot de passe oublié
+              </button>
             ) : null}
-            <label className="field">
-              <span>Email</span>
-              <input name="email" type="email" autoComplete="email" autoCapitalize="none" required />
-            </label>
-            {mode === "forgot" ? null : (
-              <PasswordField
-                label="Mot de passe"
-                name="password"
-                autoComplete={mode === "login" ? "current-password" : "new-password"}
-              />
-            )}
-            {error ? <p className="form-error">{error}</p> : null}
-            <button className="lime" type="submit" disabled={busy}>
-              {busy ? "Patiente…" : mode === "login" ? "Se connecter" : mode === "forgot" ? "Envoyer l’email" : "Créer le compte"}
-            </button>
-          </form>
-        )}
-        <p className="auth-links">
-          {mode === "login" ? (
             <button
               type="button"
               className="switch-link"
               onClick={() => {
-                setMode("forgot");
+                setMode(mode === "login" ? "register" : "login");
                 setError("");
                 setSent("");
               }}
             >
-              Mot de passe oublié
+              {mode === "login" ? "Créer un compte" : "J’ai déjà un compte"}
             </button>
-          ) : null}
-          <button
-            type="button"
-            className="switch-link"
-            onClick={() => {
-              setMode(mode === "login" ? "register" : "login");
-              setError("");
-              setSent("");
-            }}
-          >
-            {mode === "login" ? "Créer un compte" : "J’ai déjà un compte"}
-          </button>
-        </p>
-      </section>
+          </p>
+        </section>
       </div>
     </main>
   );
