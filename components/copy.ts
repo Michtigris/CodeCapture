@@ -15,66 +15,73 @@ export async function copyText(text: string) {
   }
 }
 
-function imageExt(type: string) {
-  if (type.includes("png")) return "png";
-  if (type.includes("webp")) return "webp";
-  return "jpg";
-}
-
-async function writeSeparatePhotos(files: File[]) {
-  if (files.length === 1 && navigator.clipboard?.write) {
-    try {
-      const file = files[0];
-      const type = file.type === "image/png" || file.type === "image/jpeg" ? file.type : "image/png";
-      await navigator.clipboard.write([new ClipboardItem({ [type]: file })]);
-      return;
-    } catch {
-      /* Le format n'est pas accepté : on copie le fichier tel quel. */
-    }
+async function toPngBlob(blob: Blob): Promise<Blob> {
+  if (blob.type === "image/png") return blob;
+  const bitmap = await createImageBitmap(blob);
+  const canvas = document.createElement("canvas");
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    bitmap.close();
+    throw new Error("Copie impossible.");
   }
-  await new Promise<void>((resolve, reject) => {
-    const onCopy = (event: ClipboardEvent) => {
-      const data = event.clipboardData;
-      if (!data) {
-        reject(new Error("Copie impossible."));
-        return;
-      }
-      event.preventDefault();
-      let added = 0;
-      for (const file of files) {
-        if (data.items.add(file)) added += 1;
-      }
-      if (added !== files.length) {
-        reject(new Error("Copie impossible."));
-        return;
-      }
-      resolve();
-    };
-    document.addEventListener("copy", onCopy, { once: true });
-    const ok = document.execCommand("copy");
-    if (!ok) {
-      document.removeEventListener("copy", onCopy);
-      reject(new Error("Ce navigateur ne copie pas plusieurs images."));
-    }
+  ctx.drawImage(bitmap, 0, 0);
+  bitmap.close();
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((value) => (value ? resolve(value) : reject(new Error("Copie impossible."))), "image/png");
   });
 }
 
-export async function copyPhotoSet(shots: { id: string; url: string }[]): Promise<string[]> {
+function downloadBlob(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
+async function writePngImages(pngs: Blob[]) {
+  if (!navigator.clipboard?.write) throw new Error("Ce navigateur ne copie pas les images.");
+  if (pngs.length === 1) {
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": pngs[0] })]);
+    return "copied" as const;
+  }
+  try {
+    await navigator.clipboard.write(pngs.map((blob) => new ClipboardItem({ "image/png": blob })));
+    return "copied" as const;
+  } catch {
+    /* Chrome n'accepte qu'une seule image dans le presse-papiers. */
+  }
+  for (let index = 0; index < pngs.length; index += 1) {
+    downloadBlob(pngs[index], `photo-${index + 1}.png`);
+    if (index < pngs.length - 1) await new Promise((resolve) => window.setTimeout(resolve, 180));
+  }
+  return "downloaded" as const;
+}
+
+export async function copyPhotoSet(shots: { id: string; url: string }[]): Promise<{
+  ids: string[];
+  mode: "copied" | "downloaded";
+}> {
   if (!shots.length) throw new Error("Aucune photo à copier.");
-  const files: File[] = [];
-  const copied: string[] = [];
+  const pngs: Blob[] = [];
+  const ids: string[] = [];
   for (let index = 0; index < shots.length; index += 1) {
     const shot = shots[index];
     const res = await fetch(shot.url);
     if (!res.ok) continue;
     const blob = await res.blob();
     const type = blob.type.startsWith("image/") ? blob.type : "image/jpeg";
-    files.push(new File([blob], `photo-${index + 1}.${imageExt(type)}`, { type }));
-    copied.push(shot.id);
+    pngs.push(await toPngBlob(new Blob([blob], { type })));
+    ids.push(shot.id);
   }
-  if (!files.length) throw new Error("Photos introuvables.");
-  await writeSeparatePhotos(files);
-  return copied;
+  if (!pngs.length) throw new Error("Photos introuvables.");
+  const mode = await writePngImages(pngs);
+  return { ids, mode };
 }
 
 export function downloadText(filename: string, content: string) {
