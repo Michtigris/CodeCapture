@@ -913,6 +913,7 @@ export function Workspace({ groupId }: { groupId: string }) {
           }}
           canArchive={data.group.owner === true}
           canWrite={!lookOnly}
+          userId={me?.id ?? ""}
           onArchive={async (filenames) => {
             const res = await fetch(`/api/groups/${groupId}/files`, {
               method: "POST",

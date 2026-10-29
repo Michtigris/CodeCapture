@@ -1,6 +1,14 @@
 import { json } from "@/lib/http";
 import { getCurrentUser } from "@/lib/session";
-import { getGroup, isLookOnly, isMember, saveInsertedFiles, saveManualFile, setFilesArchived } from "@/lib/store";
+import {
+  canUserManageFiles,
+  getGroup,
+  isLookOnly,
+  isMember,
+  saveInsertedFiles,
+  saveManualFile,
+  setFilesArchived,
+} from "@/lib/store";
 import { cleanInsertName, parseInsert } from "@/lib/insert";
 
 export const runtime = "nodejs";
@@ -18,10 +26,13 @@ export async function POST(request: Request, ctx: Ctx) {
 
   const body = await request.json().catch(() => null);
   if (Array.isArray(body?.archive) || Array.isArray(body?.restore)) {
-    if (group.userId !== user.id) return json({ error: "Seul le créateur du groupe peut archiver." }, 403);
     const source = (Array.isArray(body.archive) ? body.archive : body.restore) as unknown[];
     const names = [...new Set(source.map((item) => (typeof item === "string" ? cleanInsertName(item) : null)).filter((item): item is string => !!item))].slice(0, 200);
     if (!names.length) return json({ error: "Rien à archiver." }, 400);
+    if (group.userId !== user.id) {
+      const own = await canUserManageFiles(group.id, user.id, names);
+      if (!own) return json({ error: "Tu ne peux archiver que tes propres fichiers." }, 403);
+    }
     const count = await setFilesArchived(group.id, names, Array.isArray(body.archive));
     return json({ ok: true, count });
   }
@@ -29,7 +40,7 @@ export async function POST(request: Request, ctx: Ctx) {
     const files = parseInsert(body.block);
     if (!files) return json({ error: "Ce collage n'a pas la forme attendue." }, 400);
     try {
-      const placed = await saveInsertedFiles(group.id, files);
+      const placed = await saveInsertedFiles(group.id, files, user.id);
       return json(placed);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Enregistrement impossible.";
@@ -41,7 +52,14 @@ export async function POST(request: Request, ctx: Ctx) {
   const captureId = body?.captureId ? String(body.captureId) : null;
   const archivePending = body?.archivePending === true;
   try {
-    const capture = await saveManualFile({ groupId: group.id, captureId, filename, content, archivePending });
+    const capture = await saveManualFile({
+      groupId: group.id,
+      captureId,
+      filename,
+      content,
+      archivePending,
+      userId: user.id,
+    });
     return json({
       capture: {
         id: capture.id,

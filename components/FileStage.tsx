@@ -22,6 +22,7 @@ type Props = {
   focusFile?: { name: string; nonce: number } | null;
   canArchive?: boolean;
   canWrite?: boolean;
+  userId?: string;
   onArchive?: (filenames: string[]) => Promise<void>;
   onRestore?: (filenames: string[]) => Promise<void>;
 };
@@ -171,6 +172,7 @@ export function FileStage({
   focusFile,
   canArchive = false,
   canWrite = true,
+  userId = "",
   onArchive,
   onRestore,
 }: Props) {
@@ -203,6 +205,18 @@ export function FileStage({
     const history = unique.filter((row) => now - row.at >= INSERT_WEEK_MS);
     return { open, history };
   }, [captures]);
+  function ownsFile(file: ExtractedFile) {
+    return canArchive || (!!userId && file.authorId === userId);
+  }
+  function ownsNames(names: string[]) {
+    if (canArchive) return names.length > 0;
+    if (!userId || !names.length) return false;
+    const rows = [...placed.open, ...placed.history];
+    return names.every((name) => {
+      const row = rows.find((item) => item.file.filename === name);
+      return !!row && row.file.authorId === userId;
+    });
+  }
   const folders = useMemo(() => {
     const latest = new Map<string, number>();
     for (const row of placed.open) {
@@ -550,7 +564,7 @@ export function FileStage({
                 kind="folder"
                 onOpen={() => chooseFolder(item)}
                 onDouble={(anchor) => openFolderMenu(item, anchor)}
-                onArchive={canArchive ? () => askArchiveFolder(item) : undefined}
+                onArchive={ownsNames(filenamesIn(item)) ? () => askArchiveFolder(item) : undefined}
               />
             ))
           : null}
@@ -570,7 +584,7 @@ export function FileStage({
               setEditing(false);
               setMenu(false);
             }}
-            onArchive={canArchive ? () => void archiveNames([row.file.filename], `${tabLabel(row.file.filename)} archivé`) : undefined}
+            onArchive={ownsFile(row.file) ? () => void archiveNames([row.file.filename], `${tabLabel(row.file.filename)} archivé`) : undefined}
           />
         ))}
         {openPads.map((name) => (
@@ -584,7 +598,7 @@ export function FileStage({
               setEditing(false);
               setMenu(false);
             }}
-            onArchive={canArchive ? () => dropPad(name) : undefined}
+            onArchive={canWrite ? () => dropPad(name) : undefined}
           />
         ))}
         {canWrite ? (
@@ -611,7 +625,7 @@ export function FileStage({
                   setEditing(false);
                   setMenu(false);
                 }}
-                onArchive={canArchive ? () => void archiveNames([row.file.filename], `${tabLabel(row.file.filename)} archivé`) : undefined}
+                onArchive={ownsFile(row.file) ? () => void archiveNames([row.file.filename], `${tabLabel(row.file.filename)} archivé`) : undefined}
               />
             ))}
           </TabStrip>
@@ -700,7 +714,7 @@ export function FileStage({
                     </button>
                     {menu ? (
                       <div className="dot-pop" role="menu">
-                    {canArchive && canWrite ? (
+                    {canWrite && ownsFile(current) ? (
                       <button
                         type="button"
                         onClick={() => {

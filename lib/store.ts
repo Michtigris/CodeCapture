@@ -1193,6 +1193,7 @@ export function saveManualFile(input: {
   filename: string;
   content: string;
   archivePending?: boolean;
+  userId?: string;
 }): Promise<CaptureRecord> {
   return update((db) => {
     const filename = input.filename.trim().replace(/\\/g, "/").replace(/\.\./g, "").replace(/^\/+/, "");
@@ -1225,7 +1226,13 @@ export function saveManualFile(input: {
       existing.updatedAt = now;
       delete existing.archivedAt;
     } else {
-      capture.files.push({ filename, language: fileLanguage(filename), content, updatedAt: now });
+      capture.files.push({
+        filename,
+        language: fileLanguage(filename),
+        content,
+        updatedAt: now,
+        ...(input.userId ? { authorId: input.userId } : {}),
+      });
     }
     if (input.archivePending && content.trim()) {
       const pending = db.photos.filter((photo) => photo.groupId === input.groupId && !photo.captureId);
@@ -1238,6 +1245,7 @@ export function saveManualFile(input: {
 export function saveInsertedFiles(
   groupId: string,
   incoming: { filename: string; content: string }[],
+  userId?: string,
 ): Promise<{ captureId: string; filename: string }> {
   return update((db) => {
     const now = new Date().toISOString();
@@ -1283,7 +1291,13 @@ export function saveInsertedFiles(
         };
         db.captures.push(capture);
       }
-      capture.files.push({ filename, language: fileLanguage(filename), content, updatedAt: now });
+      capture.files.push({
+        filename,
+        language: fileLanguage(filename),
+        content,
+        updatedAt: now,
+        ...(userId ? { authorId: userId } : {}),
+      });
       focusCapture = capture.id;
       focusName = filename;
     }
@@ -1294,6 +1308,22 @@ export function saveInsertedFiles(
       group.copiedIds = [];
     }
     return { captureId: focusCapture, filename: focusName };
+  });
+}
+
+export function canUserManageFiles(groupId: string, userId: string, filenames: string[]): Promise<boolean> {
+  const wanted = new Set(filenames);
+  return readThrough((db) => {
+    let found = 0;
+    for (const capture of db.captures) {
+      if (capture.groupId !== groupId) continue;
+      for (const file of capture.files) {
+        if (!wanted.has(file.filename)) continue;
+        found += 1;
+        if (file.authorId !== userId) return false;
+      }
+    }
+    return found > 0;
   });
 }
 

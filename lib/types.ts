@@ -4,6 +4,7 @@ export type ExtractedFile = {
   content: string;
   updatedAt?: string;
   archivedAt?: string;
+  authorId?: string;
 };
 
 export type PhotoDTO = {
