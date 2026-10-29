@@ -660,8 +660,8 @@ export function Workspace({ groupId }: { groupId: string }) {
             </svg>
             Prompt
           </TipButton>
-          <button
-            type="button"
+          <TipButton
+            label={`Exporte jusqu’à ${MAX_PHOTOS_PER_SEND} photos en PDF. S’il y en a plus, relance pour la suite.`}
             className="lime"
             disabled={!data.photos.some((photo) => !photo.captureId)}
             onClick={() => {
@@ -692,7 +692,7 @@ export function Workspace({ groupId }: { groupId: string }) {
             }}
           >
             Exporter les photos
-          </button>
+          </TipButton>
           <span className="insert-pair">
             <button type="button" className="ghost" onClick={() => void insertClipboard()}>
               Insérer
@@ -702,11 +702,6 @@ export function Workspace({ groupId }: { groupId: string }) {
         </div>
       </div>
       {banner ? <p className="banner">{banner}</p> : null}
-      {pending > MAX_PHOTOS_PER_SEND ? (
-        <p className="hint" style={{ padding: "8px 16px 0" }}>
-          Les {MAX_PHOTOS_PER_SEND} plus anciennes partent maintenant. Relance ensuite pour la suite.
-        </p>
-      ) : null}
       <div className="switch">
         <button type="button" onClick={() => galleryRef.current?.click()}>
           Galerie
