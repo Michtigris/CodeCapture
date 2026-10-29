@@ -657,84 +657,100 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
             onChange={(event) => setPadText((map) => ({ ...map, [tab]: event.target.value }))}
           />
         </form>
-      ) : current && editing ? (
-        <form className="sheet add-file" onSubmit={(event) => void saveEdit(event)}>
-          <p className="hint">{tabLabel(current.filename)}</p>
-          <textarea value={draft} onChange={(event) => setDraft(event.target.value)} required />
-          <div className="row">
-            <button className="lime" type="submit">Enregistrer</button>
-            <button className="ghost" type="button" onClick={() => setEditing(false)}>Annuler</button>
-          </div>
-        </form>
       ) : current ? (
-        <div className="sheet">
+        <div className={editing ? "sheet sheet-edit" : "sheet"}>
           <div className="sheet-bar">
             <strong>{tabLabel(current.filename)}</strong>
             <div className="sheet-actions">
-              <button type="button" className="icon-act" aria-label="Copier tout" onClick={() => void copyFile(current)}>
-                <BarIcon name="copy" />
-              </button>
-              <button
-                type="button"
-                className="icon-act"
-                aria-label="Télécharger"
-                onClick={() => {
-                  void presentCode(current.filename, current.content).then(({ text }) => {
-                    downloadText(splitPath(current.filename).name, text);
-                  });
-                }}
-              >
-                <BarIcon name="download" />
-              </button>
-              <div className="dot-menu">
-                <button type="button" className="icon-act" aria-label="Modifier le fichier" aria-expanded={menu} onClick={() => setMenu((open) => !open)}>
-                  <BarIcon name="menu" />
-                </button>
-                {menu ? (
-                  <div className="dot-pop" role="menu">
-                    {canArchive ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void presentCode(current.filename, current.content).then(({ text }) => {
-                            setDraft(text);
-                            setEditing(true);
-                            setMenu(false);
-                          });
-                        }}
-                      >
-                        Modifier
-                      </button>
-                    ) : null}
-                    <button type="button" onClick={() => void copyAllCode()}>
-                      Copier tout le code
+              {editing ? null : (
+                <>
+                  <button type="button" className="icon-act" aria-label="Copier tout" onClick={() => void copyFile(current)}>
+                    <BarIcon name="copy" />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-act"
+                    aria-label="Télécharger"
+                    onClick={() => {
+                      void presentCode(current.filename, current.content).then(({ text }) => {
+                        downloadText(splitPath(current.filename).name, text);
+                      });
+                    }}
+                  >
+                    <BarIcon name="download" />
+                  </button>
+                  <div className="dot-menu">
+                    <button type="button" className="icon-act" aria-label="Modifier le fichier" aria-expanded={menu} onClick={() => setMenu((open) => !open)}>
+                      <BarIcon name="menu" />
                     </button>
+                    {menu ? (
+                      <div className="dot-pop" role="menu">
+                        {canArchive ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void presentCode(current.filename, current.content).then(({ text }) => {
+                                setDraft(text);
+                                setEditing(true);
+                                setMenu(false);
+                              });
+                            }}
+                          >
+                            Modifier
+                          </button>
+                        ) : null}
+                        <button type="button" onClick={() => void copyAllCode()}>
+                          Copier tout le code
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
-                ) : null}
-              </div>
+                </>
+              )}
             </div>
           </div>
           <div
             className="sheet-scroll"
             onContextMenu={(event) => {
+              if (editing) return;
               event.preventDefault();
               void copyFile(current);
             }}
           >
-            <div className="code-row">
-              <div className="gutter" aria-hidden="true">
-                {shown.split("\n").map((_, index) => (
-                  <span key={index}>{index + 1}</span>
-                ))}
+            {editing ? (
+              <textarea
+                className="code-edit"
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                spellCheck={false}
+                autoFocus
+              />
+            ) : (
+              <div className="code-row">
+                <div className="gutter" aria-hidden="true">
+                  {shown.split("\n").map((_, index) => (
+                    <span key={index}>{index + 1}</span>
+                  ))}
+                </div>
+                {shownHtml ? (
+                  <pre className="code" dangerouslySetInnerHTML={{ __html: shownHtml }} />
+                ) : (
+                  <pre className="code">{shown}</pre>
+                )}
               </div>
-              {shownHtml ? (
-                <pre className="code" dangerouslySetInnerHTML={{ __html: shownHtml }} />
-              ) : (
-                <pre className="code">{shown}</pre>
-              )}
-            </div>
+            )}
+            {editing ? (
+              <div className="edit-float">
+                <button type="button" className="edit-pill edit-pill-cancel" onClick={() => setEditing(false)}>
+                  Annuler
+                </button>
+                <button type="button" className="edit-pill edit-pill-save" onClick={() => void saveEdit()}>
+                  Enregistrer
+                </button>
+              </div>
+            ) : null}
           </div>
-          {capture?.notes ? (
+          {!editing && capture?.notes ? (
             <details className="notes">
               <summary>Ce que l’agent a vu</summary>
               <p>{capture.notes}</p>
