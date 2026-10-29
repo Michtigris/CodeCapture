@@ -28,6 +28,7 @@ export async function POST(request: Request, ctx: Ctx) {
   if (!user) return json({ error: "Connexion requise." }, 401);
   const group = await getGroup(id);
   if (!group || !isMember(group, user.id)) return json({ error: "Groupe introuvable." }, 404);
+  if (group.userId !== user.id) return json({ error: "Réservé au créateur du groupe." }, 403);
 
   const body = await request.json().catch(() => null);
   const text = String(body?.text ?? "");

@@ -694,9 +694,14 @@ export function Workspace({ groupId }: { groupId: string }) {
             Exporter les photos
           </TipButton>
           <span className="insert-pair">
-            <button type="button" className="ghost" onClick={() => void insertClipboard()}>
+            <TipButton
+              label={data.group.owner ? "Coller la réponse ChatGPT dans l’app" : "Réservé au créateur du groupe"}
+              className="ghost"
+              disabled={!data.group.owner}
+              onClick={() => void insertClipboard()}
+            >
               Insérer
-            </button>
+            </TipButton>
             <span className={`insert-dot ${insertDot}`} aria-hidden="true" />
           </span>
         </div>
