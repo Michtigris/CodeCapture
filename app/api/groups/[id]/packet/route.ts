@@ -33,12 +33,16 @@ export async function GET(request: Request, ctx: Ctx) {
   if (!jpegs.length) return json({ error: "Ces photos ne peuvent pas entrer dans le PDF." }, 400);
 
   const intro = [
-    "CodeCapture. Lis les photos de ce PDF dans l'ordre.",
+    "CodeCapture. Lis les photos de ce PDF dans l'ordre, page apres page.",
     group.brief.trim(),
-    "Reconstitue chaque fichier de code visible.",
-    "Reponds uniquement avec un objet JSON de cette forme :",
-    '{"files":[{"filename":"animal.php","language":"php","content":"<?php\\n..."}],"notes":""}',
-    "Le champ filename est le nom affiche. Le champ content est le fichier brut, sans backticks.",
+    "Recopie chaque fichier visible en entier, ligne par ligne, sans resumer.",
+    "Reponds par un seul bloc de texte, rien avant, rien apres, pas de markdown, pas de JSON.",
+    "La personne va Copier ta reponse puis la coller dans CodeCapture.",
+    "Chaque fichier : /:/: puis Dossier/nom.ext puis /:/: puis tout le contenu.",
+    "Exemple :",
+    "/:/:DIVERS/Nom.php/:/:",
+    "<?php",
+    "echo \"ok\";",
   ].join("\n");
 
   try {
@@ -46,7 +50,7 @@ export async function GET(request: Request, ctx: Ctx) {
     return new Response(new Uint8Array(pdf), {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": 'attachment; filename="codecapture.pdf"',
+        "Content-Disposition": 'attachment; filename="-CodeCapture- Photo.pdf"',
         "Cache-Control": "no-store",
         "X-Photo-Ids": ids.join(","),
       },

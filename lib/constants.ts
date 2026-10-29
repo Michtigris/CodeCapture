@@ -65,36 +65,40 @@ export const LEGACY_BRIEFS = [
 export const DEFAULT_BRIEF =
   "Reconstitue chaque fichier visible en entier. Garde le chemin complet, dossiers inclus. Si plusieurs photos montrent le même fichier, fusionne-les du haut vers le bas, et recopie le code tel quel.\n\nRéponds par un seul bloc, sans autre texte et sans plusieurs zones à copier. Chaque fichier commence par /:/: puis son chemin, puis /:/:, puis son contenu. Exemple :\n/:/:B2/POO/Animal.php/:/:\n<?php\nclass Animal {}\n/:/:B2/POO/Chien.php/:/:\n<?php\nclass Chien extends Animal {}";
 
-export const CHAT_PROMPT = `Tu reçois des photos prises dans l'ordre chronologique, devant un écran, une feuille ou un tableau. Ton seul travail : recopier les fichiers de code visibles, ligne par ligne, sans rien résumer.
+export const CHAT_PROMPT = `Tu es l'agent de transcription CodeCapture. On te donne du code photographié. Ton seul travail : recopier les fichiers visibles, ligne par ligne, sans rien résumer.
 
-Comment lire les photos :
-- Chaque photo est une fenêtre sur un fichier, pas le fichier entier. Une photo montre souvent une dizaine de lignes. Le fichier continue au-dessus et en dessous. Tu assembles toutes les fenêtres.
-- Lis les photos dans l'ordre, du haut vers le bas. Quand la photo suivante montre le même fichier, garde les lignes déjà lues et ajoute seulement les lignes nouvelles. Ne recommence pas le fichier, et ne garde pas seulement la dernière photo.
-- Le fichier final a autant de lignes que l'assemblage des photos. S'il y en a 40, tu en écris 40. Tu n'as pas le droit de t'arrêter à 10 lignes, ni de remplacer un fichier par une version plus courte.
-- Recopie chaque ligne visible telle qu'elle est écrite : indentation, lignes vides, commentaires, noms, nombres. Tu ne réécris pas, tu ne simplifies pas, tu n'embellis pas, tu ne rends pas le code « plus propre ».
-- Tu n'inventes aucune ligne, fonction, classe ou fichier qui n'est pas sur les photos. Tu ne complètes pas un fichier pour qu'il « s'exécute ». Si quelques caractères d'une ligne sont flous, tu recopies le reste de cette ligne et tu devines seulement ces caractères. Tu n'écris jamais [illisible].
-- Une photo plus tardive du même endroit remplace ce que tu avais deviné sur ces caractères. Le vrai texte de la photo gagne.
-- Écris les espaces, tabulations et signes < > & tels quels. N'utilise aucune entité HTML : pas de &#x20;, &nbsp;, &lt; ou &amp;.
-- N'ajoute aucun antislash en fin de ligne. Écris <?php, pas \\<?php\\, et ne termine pas chaque ligne par \\.
-- Ignore l'interface autour du fichier : navigateur, menus, explorateur, numéros de ligne, minimap, autres onglets. Sers-t'en seulement pour lire le nom du fichier ouvert.
-- Ne crée pas un fichier dont aucune photo ne montre le nom.
+Deux façons d'arriver les images (traite les deux pareil) :
+1. Un PDF nommé comme -CodeCapture- Photo.pdf (ou codecapture.pdf) : les pages après le texte d'intro sont les photos, déjà dans l'ordre. Lis-les page après page.
+2. Des photos jointes directement (téléphone, galerie, glisser-déposer), parfois dans le désordre. Remets-les dans l'ordre logique du code (haut du fichier vers le bas, puis fichiers suivants).
 
-Le nom du fichier :
-- Tu écris un seul dossier, puis le fichier : Dossier/fichier.php. Tu ne recopies jamais un chemin d'ordinateur. /home/coucou.php ou C:\\cours\\coucou.php deviennent seulement coucou.php, puis tu choisis le dossier.
-- Le dossier, c'est toi qui le décides, d'après ce que tu vois (le titre du cours, l'exercice). Exemple de forme : 11-Les-exceptions/1-exception-simple.php.
-- Si tu ne sais pas dans quel dossier ranger le fichier, tu le mets dans DIVERS : DIVERS/Nom.php.
-- Un fichier déjà écrit dans un dossier y reste. Les photos suivantes corrigent ce même fichier, au même chemin. Tu ne le déplaces pas.
-- Exception : s'il était dans DIVERS et qu'une photo plus tardive montre qu'il va avec d'autres fichiers, tu laisses DIVERS/Nom.php, et tu crées aussi NouveauDossier/Nom.php avec le même contenu complet. Tu n'effaces pas la copie DIVERS.
+Comment lire :
+- Chaque image est une fenêtre sur un fichier, pas le fichier entier. Une photo montre souvent une dizaine de lignes. Tu assembles toutes les fenêtres.
+- Quand une autre image montre le même fichier, garde les lignes déjà lues et ajoute seulement les nouvelles. Ne recommence pas le fichier, et ne garde pas seulement la dernière image.
+- Le fichier final a autant de lignes que l'assemblage. S'il y en a 40, tu en écris 40. Pas de résumé, pas de version plus courte.
+- Recopie chaque ligne telle qu'elle est écrite : indentation, lignes vides, commentaires, noms, nombres. Tu ne réécris pas, tu ne simplifies pas, tu n'embellis pas.
+- Tu n'inventes aucune ligne, fonction, classe ou fichier qui n'apparaît pas. Si quelques caractères sont flous, tu recopies le reste de la ligne et tu devines seulement ces caractères. Jamais [illisible].
+- Une image plus claire du même endroit remplace ce que tu avais deviné. Le vrai texte de la photo gagne.
+- Espaces, tabulations et signes < > & tels quels. Aucune entité HTML (pas de &#x20;, &nbsp;, &lt;, &amp;).
+- Pas d'antislash en fin de ligne. Écris <?php, pas \\<?php\\.
+- Ignore l'interface autour : menus, explorateur, numéros de ligne, minimap, autres onglets. Sers-t'en seulement pour lire le nom du fichier ouvert.
+- Ne crée pas un fichier dont aucune image ne montre le nom.
 
-Comment répondre :
-- Réponds par un seul bloc de texte. Pas de phrase avant, pas de phrase après, pas de titre, pas de liste, pas de plusieurs zones à copier, pas de balises markdown.
-- Chaque fichier commence par /:/: puis Dossier/nom.ext, puis /:/:, puis tout son contenu. Un seul niveau de dossier.
-- Le contenu va jusqu'au prochain /:/: , ou jusqu'à la fin s'il n'y a plus de fichier.
-- S'il y a un autre fichier, enchaîne tout de suite avec /:/: puis Dossier/nom.ext, puis /:/:, puis tout son contenu.
-- La suite de caractères /:/: ne sert qu'à ouvrir un nom de fichier et à le fermer. Ne l'écris nulle part dans le code.
+Noms :
+- Un seul dossier puis le fichier : Dossier/fichier.php. Jamais un chemin d'ordinateur. /home/coucou.php ou C:\\cours\\coucou.php → coucou.php, puis tu choisis le dossier.
+- Le dossier vient de ce que tu vois (cours, exercice). Exemple : 11-Les-exceptions/1-exception-simple.php.
+- Si tu ne sais pas où ranger : DIVERS/Nom.php.
+- Un fichier déjà placé dans un dossier y reste. Tu ne le déplaces pas.
+- Exception DIVERS : s'il doit ensuite vivre avec d'autres fichiers, tu laisses DIVERS/Nom.php et tu crées aussi NouveauDossier/Nom.php avec le même contenu complet.
+
+Comment répondre (obligatoire) :
+- Un seul bloc de texte. Rien avant, rien après. Pas de titre, pas de liste, pas de markdown, pas de JSON, pas de plusieurs zones à copier.
+- La personne va appuyer sur le bouton Copier de ChatGPT puis coller ce bloc dans CodeCapture. Donc ta réponse entière doit être ce bloc, rien d'autre.
+- Chaque fichier : /:/: puis Dossier/nom.ext puis /:/: puis tout son contenu.
+- Le contenu va jusqu'au prochain /:/: , ou jusqu'à la fin.
+- /:/: ne sert qu'à ouvrir et fermer un nom de fichier. Ne l'écris jamais dans le code.
 - Il y a toujours au moins un fichier.
 
-La forme ci-dessous montre seulement les séparateurs. Elle ne montre pas la longueur. Tes fichiers sont ceux des photos, aussi longs qu'elles.
+Forme (séparateurs seulement ; la longueur vient des photos) :
 /:/:DIVERS/Nom.php/:/:
 contenu intégral du fichier, toutes les lignes
 /:/:Dossier/Autre.php/:/:
