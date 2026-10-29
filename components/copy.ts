@@ -1,3 +1,5 @@
+import { downloadBlob, zipBlobs } from "./zip";
+
 export async function copyText(text: string) {
   try {
     await navigator.clipboard.writeText(text);
@@ -15,6 +17,12 @@ export async function copyText(text: string) {
   }
 }
 
+function imageExt(type: string) {
+  if (type.includes("png")) return "png";
+  if (type.includes("webp")) return "webp";
+  return "jpg";
+}
+
 async function toPngBlob(blob: Blob): Promise<Blob> {
   if (blob.type === "image/png") return blob;
   const bitmap = await createImageBitmap(blob);
@@ -26,6 +34,7 @@ async function toPngBlob(blob: Blob): Promise<Blob> {
     bitmap.close();
     throw new Error("Copie impossible.");
   }
+  ctx.imageSmoothingEnabled = false;
   ctx.drawImage(bitmap, 0, 0);
   bitmap.close();
   return new Promise((resolve, reject) => {
@@ -33,42 +42,24 @@ async function toPngBlob(blob: Blob): Promise<Blob> {
   });
 }
 
-function downloadBlob(blob: Blob, name: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
-}
-
-async function writePngImages(pngs: Blob[]) {
+async function copyOneImage(blob: Blob) {
   if (!navigator.clipboard?.write) throw new Error("Ce navigateur ne copie pas les images.");
-  if (pngs.length === 1) {
-    await navigator.clipboard.write([new ClipboardItem({ "image/png": pngs[0] })]);
-    return "copied" as const;
-  }
+  const type = blob.type === "image/png" || blob.type === "image/jpeg" ? blob.type : "image/jpeg";
   try {
-    await navigator.clipboard.write(pngs.map((blob) => new ClipboardItem({ "image/png": blob })));
-    return "copied" as const;
+    await navigator.clipboard.write([new ClipboardItem({ [type]: blob })]);
+    return;
   } catch {
-    /* Chrome n'accepte qu'une seule image dans le presse-papiers. */
+    /* Chrome accepte surtout image/png. */
   }
-  for (let index = 0; index < pngs.length; index += 1) {
-    downloadBlob(pngs[index], `photo-${index + 1}.png`);
-    if (index < pngs.length - 1) await new Promise((resolve) => window.setTimeout(resolve, 180));
-  }
-  return "downloaded" as const;
+  await navigator.clipboard.write([new ClipboardItem({ "image/png": await toPngBlob(blob) })]);
 }
 
 export async function copyPhotoSet(shots: { id: string; url: string }[]): Promise<{
   ids: string[];
-  mode: "copied" | "downloaded";
+  mode: "copied" | "zipped";
 }> {
   if (!shots.length) throw new Error("Aucune photo à copier.");
-  const pngs: Blob[] = [];
+  const files: { name: string; data: Uint8Array; blob: Blob }[] = [];
   const ids: string[] = [];
   for (let index = 0; index < shots.length; index += 1) {
     const shot = shots[index];
@@ -76,22 +67,27 @@ export async function copyPhotoSet(shots: { id: string; url: string }[]): Promis
     if (!res.ok) continue;
     const blob = await res.blob();
     const type = blob.type.startsWith("image/") ? blob.type : "image/jpeg";
-    pngs.push(await toPngBlob(new Blob([blob], { type })));
+    const data = new Uint8Array(await blob.arrayBuffer());
+    const pad = String(index + 1).padStart(2, "0");
+    files.push({
+      name: `photo-${pad}.${imageExt(type)}`,
+      data,
+      blob: new Blob([data], { type }),
+    });
     ids.push(shot.id);
   }
-  if (!pngs.length) throw new Error("Photos introuvables.");
-  const mode = await writePngImages(pngs);
-  return { ids, mode };
+  if (!files.length) throw new Error("Photos introuvables.");
+  if (files.length === 1) {
+    await copyOneImage(files[0].blob);
+    return { ids, mode: "copied" };
+  }
+  downloadBlob(
+    "codecapture-photos.zip",
+    zipBlobs(files.map((file) => ({ name: file.name, data: file.data }))),
+  );
+  return { ids, mode: "zipped" };
 }
 
 export function downloadText(filename: string, content: string) {
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  downloadBlob(filename, new Blob([content], { type: "text/plain;charset=utf-8" }));
 }

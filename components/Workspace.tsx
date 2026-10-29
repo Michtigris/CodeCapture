@@ -674,17 +674,13 @@ export function Workspace({ groupId }: { groupId: string }) {
                     body: JSON.stringify({ copiedIds: ids }),
                   });
                   if (!res.ok) {
-                    toast(mode === "downloaded" ? "Photos téléchargées, mais le lot n'a pas été noté." : "Photos copiées, mais le lot n'a pas été noté.");
+                    toast(mode === "zipped" ? "Zip prêt, mais le lot n'a pas été noté." : "Photos copiées, mais le lot n'a pas été noté.");
                     return;
                   }
-                  if (mode === "downloaded") {
-                    toast(
-                      ids.length > 1
-                        ? `${ids.length} photos téléchargées — glisse-les dans ChatGPT`
-                        : "Photo téléchargée — glisse-la dans ChatGPT",
-                    );
+                  if (mode === "zipped") {
+                    toast(`${ids.length} photos dans le zip — ouvre-le et glisse-les dans ChatGPT`);
                   } else {
-                    toast(ids.length > 1 ? `${ids.length} photos copiées` : "Photo copiée");
+                    toast("Photo copiée");
                   }
                   await reload();
                 })
