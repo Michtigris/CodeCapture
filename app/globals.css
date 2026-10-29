@@ -576,7 +576,20 @@ a.lime { display: inline-flex; align-items: center; justify-content: center; tex
 }
 .roster-on { color: var(--text); }
 .roster-off { color: #6f7468; }
-.roster-name { min-width: 0; }
+.roster-name {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.roster-crown {
+  display: inline-flex;
+  color: var(--lime);
+  flex: 0 0 auto;
+  line-height: 0;
+}
+.roster-off .roster-crown { color: #8a9160; }
 .roster-mod { position: relative; flex: 0 0 auto; }
 .roster-dots {
   background: transparent;

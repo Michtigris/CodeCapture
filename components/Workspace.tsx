@@ -636,6 +636,16 @@ export function Workspace({ groupId }: { groupId: string }) {
                       <li key={row.id} role="option" className={row.online ? "roster-on" : "roster-off"}>
                         <span className="roster-name">
                           {row.name}
+                          {row.owner ? (
+                            <span className="roster-crown" title="Créateur du groupe" aria-label="Créateur du groupe">
+                              <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+                                <path
+                                  d="M3 8.5 7.2 13 12 5l4.8 8L21 8.5V18H3V8.5Z"
+                                  fill="currentColor"
+                                />
+                              </svg>
+                            </span>
+                          ) : null}
                           {row.banned ? <span className="roster-tag ban"> banni</span> : null}
                           {row.lookOnly && !row.banned ? <span className="roster-tag"> lecture</span> : null}
                         </span>
