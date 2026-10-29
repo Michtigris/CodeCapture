@@ -678,8 +678,8 @@ export function Workspace({ groupId }: { groupId: string }) {
                   }
                   toast(
                     mode === "saved"
-                      ? `${ids.length} photo${ids.length > 1 ? "s" : ""} dans CodeCapture-photos.pdf`
-                      : `${ids.length} photo${ids.length > 1 ? "s" : ""} exportées (CodeCapture-photos.pdf)`,
+                      ? `${ids.length} photo${ids.length > 1 ? "s" : ""} dans -CodeCapture- Photo.pdf`
+                      : `${ids.length} photo${ids.length > 1 ? "s" : ""} exportées (-CodeCapture- Photo.pdf)`,
                   );
                   await reload();
                 })

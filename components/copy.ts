@@ -1,6 +1,6 @@
 import { downloadBlob } from "./zip";
 
-const PHOTO_PDF_NAME = "CodeCapture-photos.pdf";
+const PHOTO_PDF_NAME = "-CodeCapture- Photo.pdf";
 
 export async function copyText(text: string) {
   try {
