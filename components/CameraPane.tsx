@@ -26,7 +26,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   const streamRef = useRef<MediaStream | null>(null);
   const cropRef = useRef<NormRect>(FULL);
   const zoomRef = useRef(1);
-  const followRef = useRef(true);
+  const followRef = useRef(false);
   const pinchRef = useRef<{ dist: number; zoom: number } | null>(null);
   const hardwareZoomRef = useRef<number | null>(null);
   const zoomRangeRef = useRef<ZoomRange | null>(null);
@@ -52,7 +52,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   const [ownInterval, setOwnInterval] = useState(intervalSec);
   const [sense, setSense] = useState<SenseId>("normal");
   const [gap, setGap] = useState<GapSec>(5);
-  const [follow, setFollow] = useState(true);
+  const [follow, setFollow] = useState(false);
   const [locked, setLocked] = useState(false);
   const [mag, setMag] = useState(1);
   const [viewMag, setViewMag] = useState(1);
@@ -453,13 +453,13 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   }, [groupId]);
 
   useEffect(() => {
-    let saved = true;
+    let saved = false;
     try {
       const raw = localStorage.getItem(`cc_follow_${groupId}`);
-      if (raw === "0" || raw === "false") saved = false;
-      else if (raw === "1" || raw === "true") saved = true;
+      if (raw === "1" || raw === "true") saved = true;
+      else if (raw === "0" || raw === "false") saved = false;
     } catch {
-      saved = true;
+      saved = false;
     }
     followRef.current = saved;
     setFollow(saved);
@@ -556,7 +556,6 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
           return;
         }
         if (command.action === "start") {
-          rememberFollow(true);
           try {
             if (!readyRef.current) await enableRef.current(facingRef.current);
             if (streamRef.current && !runningRef.current) {
@@ -786,7 +785,6 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   }
 
   async function activate() {
-    rememberFollow(true);
     await enableCamera(facingRef.current);
     if (!streamRef.current) return;
     leadRef.current = true;
