@@ -16,10 +16,10 @@ function devOrigins(): string[] {
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   allowedDevOrigins: devOrigins(),
-  // Short /ABCDE URLs keep working. Page is under /j/[pin] so Safari can load the
-  // encoded chunk (.../j/%5Bpin%5D/...). A root /[code] chunk 404s when brackets are encoded.
+  // Short /ABCDE → /join?c=ABCDE. Static /join avoids dynamic-route chunks with
+  // [brackets] in the path, which 404 under Safari's percent-encoded requests.
   async rewrites() {
-    return [{ source: "/:pin([a-zA-Z]{5})", destination: "/j/:pin" }];
+    return [{ source: "/:pin([a-zA-Z]{5})", destination: "/join?c=:pin" }];
   },
   webpack: (config, { isServer }) => {
     config.resolve.alias = {

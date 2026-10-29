@@ -3,20 +3,9 @@ import type { NextRequest } from "next/server";
 import { safeNext } from "@/lib/origin";
 
 export function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl;
-
-  // Safari/nginx sometimes lowercases %5B/%5D in dynamic-route chunk URLs.
-  if (pathname.startsWith("/_next/static/") && /%5[bBdD]/.test(pathname)) {
-    const fixed = pathname.replace(/%5b/gi, "%5B").replace(/%5d/gi, "%5D");
-    if (fixed !== pathname) {
-      const url = req.nextUrl.clone();
-      url.pathname = fixed;
-      return NextResponse.rewrite(url);
-    }
-  }
-
   const session = req.cookies.get("cc_session")?.value;
-  const pinPath = pathname.match(/^\/(?:j\/)?([a-zA-Z]{5})$/);
+  const { pathname } = req.nextUrl;
+  const pinPath = pathname.match(/^\/([a-zA-Z]{5})$/);
   if (pinPath && !session) {
     const url = new URL("/", req.url);
     url.searchParams.set("next", `/${pinPath[1].toUpperCase()}`);
@@ -28,11 +17,13 @@ export function middleware(req: NextRequest) {
     pathname.startsWith("/groupes/") ||
     pathname.startsWith("/groupe/") ||
     pathname === "/reglages" ||
-    pathname.startsWith("/reglages/");
+    pathname.startsWith("/reglages/") ||
+    pathname === "/join";
 
   if (protectedPath && !session) {
     const url = new URL("/", req.url);
-    url.searchParams.set("next", pathname);
+    const next = pathname === "/join" ? req.nextUrl.searchParams.get("c") : null;
+    url.searchParams.set("next", next && /^[a-zA-Z]{5}$/.test(next) ? `/${next.toUpperCase()}` : pathname);
     return NextResponse.redirect(url);
   }
   if (pathname === "/" && session) {
@@ -42,15 +33,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    "/",
-    "/groupes",
-    "/groupes/:path*",
-    "/groupe/:path*",
-    "/reglages",
-    "/reglages/:path*",
-    "/j/:pin",
-    "/:pin",
-    "/_next/static/chunks/app/:path*",
-  ],
+  matcher: ["/", "/groupes", "/groupes/:path*", "/groupe/:path*", "/reglages", "/reglages/:path*", "/join", "/:pin"],
 };
