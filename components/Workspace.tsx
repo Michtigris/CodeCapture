@@ -677,9 +677,11 @@ export function Workspace({ groupId }: { groupId: string }) {
                     return;
                   }
                   toast(
-                    mode === "saved"
-                      ? `${ids.length} photo${ids.length > 1 ? "s" : ""} dans -CodeCapture- Photo.pdf`
-                      : `${ids.length} photo${ids.length > 1 ? "s" : ""} exportées (-CodeCapture- Photo.pdf)`,
+                    mode === "updated"
+                      ? `${ids.length} photo${ids.length > 1 ? "s" : ""} remplacées dans -CodeCapture- Photo.pdf`
+                      : mode === "saved"
+                        ? `${ids.length} photo${ids.length > 1 ? "s" : ""} dans -CodeCapture- Photo.pdf`
+                        : `${ids.length} photo${ids.length > 1 ? "s" : ""} exportées (-CodeCapture- Photo.pdf)`,
                   );
                   await reload();
                 })
