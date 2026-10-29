@@ -1,5 +1,3 @@
-import { downloadBlob, zipBlobs } from "./zip";
-
 export async function copyText(text: string) {
   try {
     await navigator.clipboard.writeText(text);
@@ -17,77 +15,81 @@ export async function copyText(text: string) {
   }
 }
 
-function imageExt(type: string) {
-  if (type.includes("png")) return "png";
-  if (type.includes("webp")) return "webp";
-  return "jpg";
-}
-
-async function toPngBlob(blob: Blob): Promise<Blob> {
-  if (blob.type === "image/png") return blob;
-  const bitmap = await createImageBitmap(blob);
-  const canvas = document.createElement("canvas");
-  canvas.width = bitmap.width;
-  canvas.height = bitmap.height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    bitmap.close();
-    throw new Error("Copie impossible.");
-  }
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(bitmap, 0, 0);
-  bitmap.close();
+function canvasToPng(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob((value) => (value ? resolve(value) : reject(new Error("Copie impossible."))), "image/png");
   });
 }
 
-async function copyOneImage(blob: Blob) {
-  if (!navigator.clipboard?.write) throw new Error("Ce navigateur ne copie pas les images.");
-  const type = blob.type === "image/png" || blob.type === "image/jpeg" ? blob.type : "image/jpeg";
-  try {
-    await navigator.clipboard.write([new ClipboardItem({ [type]: blob })]);
-    return;
-  } catch {
-    /* Chrome accepte surtout image/png. */
+async function stackPhotos(bitmaps: ImageBitmap[]): Promise<Blob> {
+  const maxSide = 16384;
+  const gap = 18;
+  const nativeWidth = bitmaps.reduce((max, bitmap) => Math.max(max, bitmap.width), 1);
+  const nativeHeight = bitmaps.reduce((sum, bitmap) => sum + bitmap.height, 0) + gap * Math.max(0, bitmaps.length - 1);
+  const scale = Math.min(1, maxSide / nativeWidth, maxSide / nativeHeight);
+  const sizes = bitmaps.map((bitmap) => ({
+    w: Math.max(1, Math.round(bitmap.width * scale)),
+    h: Math.max(1, Math.round(bitmap.height * scale)),
+  }));
+  const gapPx = Math.round(gap * scale);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(nativeWidth * scale));
+  canvas.height = sizes.reduce((sum, size) => sum + size.h, 0) + gapPx * Math.max(0, sizes.length - 1);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Copie impossible.");
+  ctx.imageSmoothingEnabled = scale < 1;
+  ctx.imageSmoothingQuality = "high";
+  ctx.fillStyle = "#11140f";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  let y = 0;
+  for (let index = 0; index < bitmaps.length; index += 1) {
+    ctx.drawImage(bitmaps[index], 0, y, sizes[index].w, sizes[index].h);
+    y += sizes[index].h + gapPx;
+    bitmaps[index].close();
   }
-  await navigator.clipboard.write([new ClipboardItem({ "image/png": await toPngBlob(blob) })]);
+  return canvasToPng(canvas);
 }
 
-export async function copyPhotoSet(shots: { id: string; url: string }[]): Promise<{
-  ids: string[];
-  mode: "copied" | "zipped";
-}> {
+export async function copyPhotoSet(shots: { id: string; url: string }[]): Promise<string[]> {
   if (!shots.length) throw new Error("Aucune photo à copier.");
-  const files: { name: string; data: Uint8Array; blob: Blob }[] = [];
-  const ids: string[] = [];
-  for (let index = 0; index < shots.length; index += 1) {
-    const shot = shots[index];
+  if (!navigator.clipboard?.write) throw new Error("Ce navigateur ne copie pas les images.");
+  const bitmaps: ImageBitmap[] = [];
+  const copied: string[] = [];
+  for (const shot of shots) {
     const res = await fetch(shot.url);
     if (!res.ok) continue;
-    const blob = await res.blob();
-    const type = blob.type.startsWith("image/") ? blob.type : "image/jpeg";
-    const data = new Uint8Array(await blob.arrayBuffer());
-    const pad = String(index + 1).padStart(2, "0");
-    files.push({
-      name: `photo-${pad}.${imageExt(type)}`,
-      data,
-      blob: new Blob([data], { type }),
-    });
-    ids.push(shot.id);
+    bitmaps.push(await createImageBitmap(await res.blob()));
+    copied.push(shot.id);
   }
-  if (!files.length) throw new Error("Photos introuvables.");
-  if (files.length === 1) {
-    await copyOneImage(files[0].blob);
-    return { ids, mode: "copied" };
+  if (!bitmaps.length) throw new Error("Photos introuvables.");
+
+  let png: Blob;
+  if (bitmaps.length === 1) {
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmaps[0].width;
+    canvas.height = bitmaps[0].height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Copie impossible.");
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(bitmaps[0], 0, 0);
+    bitmaps[0].close();
+    png = await canvasToPng(canvas);
+  } else {
+    png = await stackPhotos(bitmaps);
   }
-  downloadBlob(
-    "codecapture-photos.zip",
-    zipBlobs(files.map((file) => ({ name: file.name, data: file.data }))),
-  );
-  return { ids, mode: "zipped" };
+
+  await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+  return copied;
 }
 
 export function downloadText(filename: string, content: string) {
-  downloadBlob(filename, new Blob([content], { type: "text/plain;charset=utf-8" }));
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
