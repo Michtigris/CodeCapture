@@ -873,15 +873,17 @@ export function Workspace({ groupId }: { groupId: string }) {
                     </button>
                     <div className="frame-meta">
                       <span>{formatWhen(photo.createdAt)}</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (confirmId === photo.id) void removePhoto(photo.id);
-                          else setConfirmId(photo.id);
-                        }}
-                      >
-                        {confirmId === photo.id ? "Confirmer" : "Retirer"}
-                      </button>
+                      {data.group.owner ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirmId === photo.id) void removePhoto(photo.id);
+                            else setConfirmId(photo.id);
+                          }}
+                        >
+                          {confirmId === photo.id ? "Confirmer" : "Retirer"}
+                        </button>
+                      ) : null}
                     </div>
                   </article>
                 ))}

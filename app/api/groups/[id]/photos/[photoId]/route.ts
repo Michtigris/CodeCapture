@@ -34,6 +34,9 @@ export async function DELETE(_request: Request, ctx: Ctx) {
   if (!group || !isMember(group, user.id)) return json({ error: "Groupe introuvable." }, 404);
   const photo = await getPhoto(photoId);
   if (!photo || photo.groupId !== group.id) return json({ error: "Photo introuvable." }, 404);
+  if (photo.captureId && group.userId !== user.id) {
+    return json({ error: "Seul le créateur du groupe peut retirer une photo de l'historique." }, 403);
+  }
   await deletePhoto(photo.id);
   return json({ ok: true });
 }
