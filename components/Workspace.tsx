@@ -667,23 +667,30 @@ export function Workspace({ groupId }: { groupId: string }) {
             onClick={() => {
               const waiting = data.photos.filter((photo) => !photo.captureId);
               void copyPhotoSet(waiting.map((photo) => ({ id: photo.id, url: photo.url })))
-                .then(async (ids) => {
+                .then(async ({ ids, mode }) => {
                   const res = await fetch(`/api/groups/${groupId}`, {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ copiedIds: ids }),
                   });
                   if (!res.ok) {
-                    toast("Photos copiées, mais le lot n'a pas été noté.");
+                    toast("Fichier prêt, mais le lot n'a pas été noté.");
                     return;
                   }
-                  toast(ids.length > 1 ? `${ids.length} photos copiées` : "Photo copiée");
+                  toast(
+                    mode === "saved"
+                      ? `${ids.length} photo${ids.length > 1 ? "s" : ""} dans CodeCapture-photos.zip`
+                      : `${ids.length} photo${ids.length > 1 ? "s" : ""} téléchargées (CodeCapture-photos.zip)`,
+                  );
                   await reload();
                 })
-                .catch((error) => toast(error instanceof Error ? error.message : "Copie impossible."));
+                .catch((error) => {
+                  if (error instanceof DOMException && error.name === "AbortError") return;
+                  toast(error instanceof Error ? error.message : "Export impossible.");
+                });
             }}
           >
-            Copier les photos
+            Télécharger les photos
           </button>
           <span className="insert-pair">
             <button type="button" className="ghost" onClick={() => void insertClipboard()}>
