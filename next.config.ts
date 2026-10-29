@@ -16,10 +16,10 @@ function devOrigins(): string[] {
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   allowedDevOrigins: devOrigins(),
-  // Short /ABCDE URLs keep working, but the page lives under /j/[code]
-  // so Safari's encoded chunk path (.../j/%5Bcode%5D/...) is served (root /%5Bcode%5D/ 404s).
+  // Short /ABCDE URLs keep working. Page is under /j/[pin] so Safari can load the
+  // encoded chunk (.../j/%5Bpin%5D/...). A root /[code] chunk 404s when brackets are encoded.
   async rewrites() {
-    return [{ source: "/:code([a-zA-Z]{5})", destination: "/j/:code" }];
+    return [{ source: "/:pin([a-zA-Z]{5})", destination: "/j/:pin" }];
   },
   webpack: (config, { isServer }) => {
     config.resolve.alias = {

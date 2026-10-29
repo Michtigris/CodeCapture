@@ -16,10 +16,10 @@ export function middleware(req: NextRequest) {
   }
 
   const session = req.cookies.get("cc_session")?.value;
-  const codePath = pathname.match(/^\/(?:j\/)?([a-zA-Z]{5})$/);
-  if (codePath && !session) {
+  const pinPath = pathname.match(/^\/(?:j\/)?([a-zA-Z]{5})$/);
+  if (pinPath && !session) {
     const url = new URL("/", req.url);
-    url.searchParams.set("next", `/${codePath[1].toUpperCase()}`);
+    url.searchParams.set("next", `/${pinPath[1].toUpperCase()}`);
     return NextResponse.redirect(url);
   }
 
@@ -49,8 +49,8 @@ export const config = {
     "/groupe/:path*",
     "/reglages",
     "/reglages/:path*",
-    "/j/:code",
-    "/:code",
+    "/j/:pin",
+    "/:pin",
     "/_next/static/chunks/app/:path*",
   ],
 };
