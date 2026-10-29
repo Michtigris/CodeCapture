@@ -1,6 +1,6 @@
 import { json } from "@/lib/http";
 import { getCurrentUser } from "@/lib/session";
-import { getGroup, isMember, saveInsertedFiles, saveManualFile, setFilesArchived } from "@/lib/store";
+import { getGroup, isLookOnly, isMember, saveInsertedFiles, saveManualFile, setFilesArchived } from "@/lib/store";
 import { cleanInsertName, parseInsert } from "@/lib/insert";
 
 export const runtime = "nodejs";
@@ -14,6 +14,7 @@ export async function POST(request: Request, ctx: Ctx) {
   if (!user) return json({ error: "Connexion requise." }, 401);
   const group = await getGroup(id);
   if (!group || !isMember(group, user.id)) return json({ error: "Groupe introuvable." }, 404);
+  if (isLookOnly(group, user.id)) return json({ error: "Mode lecture seule." }, 403);
 
   const body = await request.json().catch(() => null);
   if (Array.isArray(body?.archive) || Array.isArray(body?.restore)) {

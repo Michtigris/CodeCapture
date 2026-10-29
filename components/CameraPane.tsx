@@ -18,9 +18,20 @@ type Props = {
   onToast: (message: string) => void;
   onShowQr: () => void;
   ownerName?: string;
+  lookOnly?: boolean;
 };
 
-export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, onCapture, onToast, onShowQr, ownerName = "" }: Props) {
+export function CameraPane({
+  groupId,
+  cameras,
+  intervalSec,
+  onIntervalChange,
+  onCapture,
+  onToast,
+  onShowQr,
+  ownerName = "",
+  lookOnly = false,
+}: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const finderRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -188,6 +199,10 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   }, [pending]);
 
   async function shoot() {
+    if (lookOnly) {
+      onToast("Mode lecture seule.");
+      return;
+    }
     const video = videoRef.current;
     const finder = finderRef.current;
     if (!video) throw new Error("La caméra n'est pas prête.");
@@ -320,6 +335,10 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   }, [running, ownInterval]);
 
   async function enableCamera(nextFacing: "environment" | "user") {
+    if (lookOnly) {
+      onToast("Mode lecture seule : caméra indisponible.");
+      return;
+    }
     setCameraError("");
     if (!navigator.mediaDevices?.getUserMedia) {
       setCameraError("Ce navigateur ne donne pas accès à la caméra.");
@@ -857,6 +876,10 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   }, [storedReady, selectedId]);
 
   async function sendCommand(command: "start" | "stop" | "shoot" | "interval", seconds?: number, sense?: SenseId, gapSec?: GapSec) {
+    if (lookOnly) {
+      onToast("Mode lecture seule : caméra indisponible.");
+      return;
+    }
     if (!selected) {
       onToast("Choisis un téléphone.");
       return;
@@ -982,10 +1005,16 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
                 <p>Démarre le cycle. Les fichiers restent sur cet écran.</p>
               ) : (
                 <>
-                  <p>Place le téléphone devant l’écran, le tableau ou la feuille.</p>
-                <button type="button" className="lime activate-cam" onClick={() => void activate()}>
-                  Activer la caméra
-                </button>
+                  <p>
+                    {lookOnly
+                      ? "Lecture seule : tu peux voir le groupe, pas piloter la caméra."
+                      : "Place le téléphone devant l’écran, le tableau ou la feuille."}
+                  </p>
+                  {lookOnly ? null : (
+                    <button type="button" className="lime activate-cam" onClick={() => void activate()}>
+                      Activer la caméra
+                    </button>
+                  )}
                 </>
               )}
             </div>

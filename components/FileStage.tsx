@@ -21,6 +21,7 @@ type Props = {
   onToast: (message: string) => void;
   focusFile?: { name: string; nonce: number } | null;
   canArchive?: boolean;
+  canWrite?: boolean;
   onArchive?: (filenames: string[]) => Promise<void>;
   onRestore?: (filenames: string[]) => Promise<void>;
 };
@@ -160,7 +161,19 @@ function TabChip({
   );
 }
 
-export function FileStage({ captures, photos, captureId, onSelectCapture, onSaveFile, onToast, focusFile, canArchive = false, onArchive, onRestore }: Props) {
+export function FileStage({
+  captures,
+  photos,
+  captureId,
+  onSelectCapture,
+  onSaveFile,
+  onToast,
+  focusFile,
+  canArchive = false,
+  canWrite = true,
+  onArchive,
+  onRestore,
+}: Props) {
   const capture = captures.find((item) => item.id === captureId) ?? captures[0] ?? null;
   const files = capture?.files ?? EMPTY_FILES;
   const placed = useMemo(() => {
@@ -574,9 +587,11 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
             onArchive={canArchive ? () => dropPad(name) : undefined}
           />
         ))}
-        <button type="button" className="tab plus" aria-label="Nouvel onglet" onClick={openPad}>
-          +
-        </button>
+        {canWrite ? (
+          <button type="button" className="tab plus" aria-label="Nouvel onglet" onClick={openPad}>
+            +
+          </button>
+        ) : null}
       </TabStrip>}
       {!onCaptureTab && historyHere.length ? (
         <details className="file-history">
@@ -685,20 +700,20 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
                     </button>
                     {menu ? (
                       <div className="dot-pop" role="menu">
-                        {canArchive ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void presentCode(current.filename, current.content).then(({ text }) => {
-                                setDraft(text);
-                                setEditing(true);
-                                setMenu(false);
-                              });
-                            }}
-                          >
-                            Modifier
-                          </button>
-                        ) : null}
+                    {canArchive && canWrite ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void presentCode(current.filename, current.content).then(({ text }) => {
+                            setDraft(text);
+                            setEditing(true);
+                            setMenu(false);
+                          });
+                        }}
+                      >
+                        Modifier
+                      </button>
+                    ) : null}
                         <button type="button" onClick={() => void copyAllCode()}>
                           Copier tout le code
                         </button>

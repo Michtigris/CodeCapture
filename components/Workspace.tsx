@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CHAT_PROMPT, DEFAULT_BRIEF, MAX_PHOTOS_PER_SEND } from "@/lib/constants";
 import { INSERT_DAY_MS, parseInsert } from "@/lib/insert";
-import type { CameraDTO, GroupPayload, PublicUser } from "@/lib/types";
+import type { GroupPayload, MemberDTO, PublicUser } from "@/lib/types";
 import { CameraPane } from "./CameraPane";
 import { fileToJpeg } from "./images";
 import { copyText, exportPhotoPdf } from "./copy";
@@ -15,27 +15,6 @@ import { formatWhen } from "./format";
 import { Toast, useToast } from "./toast";
 import { TipButton } from "./TipButton";
 import { TopBar } from "./TopBar";
-
-function phoneOwner(camera: CameraDTO, members: string[]) {
-  if (camera.ownerName) return camera.ownerName;
-  const raw = camera.label.replace(/^Téléphone\s+/i, "").replace(/\s+\d+$/, "").trim();
-  const matches = members.filter((name) => name.split(/\s+/)[0]?.toLowerCase() === raw.toLowerCase());
-  if (matches.length === 1) return matches[0];
-  return camera.label || "Téléphone";
-}
-
-function rosterRows(members: string[], cameras: CameraDTO[]) {
-  const rows = members.map((name) => ({ name, phone: false }));
-  for (const camera of cameras) {
-    if (camera.phone === false) continue;
-    rows.push({ name: phoneOwner(camera, members), phone: true });
-  }
-  return rows.sort((a, b) => {
-    const left = a.phone ? `${a.name} [PHONE]` : a.name;
-    const right = b.phone ? `${b.name} [PHONE]` : b.name;
-    return left.localeCompare(right, "fr", { sensitivity: "base" });
-  });
-}
 
 function pasteKey(groupId: string) {
   return `cc_paste_${groupId}`;
@@ -88,6 +67,7 @@ export function Workspace({ groupId }: { groupId: string }) {
   const [lotIndex, setLotIndex] = useState(0);
   const [nameLive, setNameLive] = useState(false);
   const [rosterOpen, setRosterOpen] = useState(false);
+  const [modMenu, setModMenu] = useState<string | null>(null);
   const rosterRef = useRef<HTMLDivElement>(null);
   const [insertDot, setInsertDot] = useState<"idle" | "ok" | "bad" | "same">("idle");
   const [focusFile, setFocusFile] = useState<{ name: string; nonce: number } | null>(null);
@@ -123,6 +103,10 @@ export function Workspace({ groupId }: { groupId: string }) {
       location.href = "/";
       return;
     }
+    if (res.status === 403) {
+      location.href = "/groupes";
+      return;
+    }
     if (res.status === 404) {
       setMissing(true);
       return;
@@ -132,6 +116,34 @@ export function Workspace({ groupId }: { groupId: string }) {
     setData(payload);
     setMissing(false);
   }, [groupId]);
+
+  async function moderate(targetId: string, action: "kick" | "ban" | "unban" | "look" | "unlook") {
+    setModMenu(null);
+    const res = await fetch(`/api/groups/${groupId}/moderate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targetId, action }),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast(payload.error || "Action impossible.");
+      return;
+    }
+    if (Array.isArray(payload.members)) {
+      setData((current) => (current ? { ...current, members: payload.members as MemberDTO[] } : current));
+    }
+    toast(
+      action === "kick"
+        ? "Membre exclu 10 secondes."
+        : action === "ban"
+          ? "Membre banni."
+          : action === "unban"
+            ? "Membre débanni."
+            : action === "look"
+              ? "Lecture seule activée."
+              : "Lecture seule retirée.",
+    );
+  }
 
   useEffect(() => {
     let stop = false;
@@ -252,10 +264,16 @@ export function Workspace({ groupId }: { groupId: string }) {
   useEffect(() => {
     if (!rosterOpen) return;
     function onPointer(event: PointerEvent) {
-      if (!rosterRef.current?.contains(event.target as Node)) setRosterOpen(false);
+      if (!rosterRef.current?.contains(event.target as Node)) {
+        setRosterOpen(false);
+        setModMenu(null);
+      }
     }
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setRosterOpen(false);
+      if (event.key === "Escape") {
+        setRosterOpen(false);
+        setModMenu(null);
+      }
     }
     window.addEventListener("pointerdown", onPointer);
     window.addEventListener("keydown", onKey);
@@ -494,6 +512,7 @@ export function Workspace({ groupId }: { groupId: string }) {
   const pending = data.photos.filter((photo) => !photo.captureId).length;
   const target = Math.min(pending, MAX_PHOTOS_PER_SEND);
   const needsKey = me ? !me.hasOpenAIKey : false;
+  const lookOnly = data?.group.lookOnly === true;
   function flashDot(state: "ok" | "bad" | "same", ms: number) {
     window.clearTimeout(dotTimer.current);
     setInsertDot(state);
@@ -613,10 +632,50 @@ export function Workspace({ groupId }: { groupId: string }) {
                   <i className="tick bl" />
                   <i className="tick br" />
                   <ul>
-                    {rosterRows(data.members ?? [], data.cameras ?? []).map((row, index) => (
-                      <li key={`${row.phone ? "p" : "m"}-${index}-${row.name}`} role="option">
-                        {row.name}
-                        {row.phone ? <span className="roster-tag"> [PHONE]</span> : null}
+                    {(data.members ?? []).map((row) => (
+                      <li key={row.id} role="option" className={row.online ? "roster-on" : "roster-off"}>
+                        <span className="roster-name">
+                          {row.name}
+                          {row.banned ? <span className="roster-tag ban"> banni</span> : null}
+                          {row.lookOnly && !row.banned ? <span className="roster-tag"> lecture</span> : null}
+                        </span>
+                        {data.group.owner && !row.owner ? (
+                          <span className="roster-mod">
+                            <button
+                              type="button"
+                              className="roster-dots"
+                              aria-label={`Actions pour ${row.name}`}
+                              aria-expanded={modMenu === row.id}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setModMenu((current) => (current === row.id ? null : row.id));
+                              }}
+                            >
+                              ···
+                            </button>
+                            {modMenu === row.id ? (
+                              <div className="roster-actions" role="menu">
+                                <button type="button" role="menuitem" onClick={() => void moderate(row.id, "kick")}>
+                                  Kick
+                                </button>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  onClick={() => void moderate(row.id, row.banned ? "unban" : "ban")}
+                                >
+                                  {row.banned ? "Débannir" : "Bannir"}
+                                </button>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  onClick={() => void moderate(row.id, row.lookOnly ? "unlook" : "look")}
+                                >
+                                  {row.lookOnly ? "Fin lecture seule" : "Look only"}
+                                </button>
+                              </div>
+                            ) : null}
+                          </span>
+                        ) : null}
                       </li>
                     ))}
                   </ul>
@@ -626,12 +685,12 @@ export function Workspace({ groupId }: { groupId: string }) {
           </div>
         </div>
         <div className="group-actions">
-          {needsKey ? null : (
+          {needsKey || lookOnly ? null : (
             <button type="button" className="lime" disabled={sending || target === 0} onClick={() => void send()}>
               {label}
             </button>
           )}
-          {needsKey ? null : (
+          {needsKey || lookOnly ? null : (
             <button type="button" className="ghost" disabled={packing || target === 0} onClick={() => void preparePacket()}>
               {packing ? "Préparation du PDF…" : "PDF pour l’application"}
             </button>
@@ -652,7 +711,12 @@ export function Workspace({ groupId }: { groupId: string }) {
             </div>
           ) : null}
           <p className="group-stats">{pending} dans le lot</p>
-          <TipButton label="Copier le prompt à coller avec les photos" className="ghost prompt-copy" onClick={() => void copyPrompt()}>
+          <TipButton
+            label={lookOnly ? "Mode lecture seule" : "Copier le prompt à coller avec les photos"}
+            className="ghost prompt-copy"
+            disabled={lookOnly}
+            onClick={() => void copyPrompt()}
+          >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <rect x="8" y="3" width="8" height="4" rx="1" />
               <path d="M8 5H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2" />
@@ -661,9 +725,13 @@ export function Workspace({ groupId }: { groupId: string }) {
             Prompt
           </TipButton>
           <TipButton
-            label={`Exporte jusqu’à ${MAX_PHOTOS_PER_SEND} photos en PDF. S’il y en a plus, relance pour la suite.`}
+            label={
+              lookOnly
+                ? "Mode lecture seule"
+                : `Exporte jusqu’à ${MAX_PHOTOS_PER_SEND} photos en PDF. S’il y en a plus, relance pour la suite.`
+            }
             className="lime"
-            disabled={!data.photos.some((photo) => !photo.captureId)}
+            disabled={lookOnly || !data.photos.some((photo) => !photo.captureId)}
             onClick={() => {
               void exportPhotoPdf(groupId)
                 .then(async ({ ids, mode }) => {
@@ -695,9 +763,15 @@ export function Workspace({ groupId }: { groupId: string }) {
           </TipButton>
           <span className="insert-pair">
             <TipButton
-              label={data.group.owner ? "Coller la réponse ChatGPT dans l’app" : "Réservé au créateur du groupe"}
+              label={
+                lookOnly
+                  ? "Mode lecture seule"
+                  : data.group.owner
+                    ? "Coller la réponse ChatGPT dans l’app"
+                    : "Réservé au créateur du groupe"
+              }
               className="ghost"
-              disabled={!data.group.owner}
+              disabled={lookOnly || !data.group.owner}
               onClick={() => void insertClipboard()}
             >
               Insérer
@@ -708,7 +782,7 @@ export function Workspace({ groupId }: { groupId: string }) {
       </div>
       {banner ? <p className="banner">{banner}</p> : null}
       <div className="switch">
-        <button type="button" onClick={() => galleryRef.current?.click()}>
+        <button type="button" disabled={lookOnly} onClick={() => galleryRef.current?.click()}>
           Galerie
         </button>
         <input
@@ -824,6 +898,7 @@ export function Workspace({ groupId }: { groupId: string }) {
           onToast={toast}
           onShowQr={openQr}
           ownerName={me?.name ?? ""}
+          lookOnly={lookOnly}
         />
         </div>
         <FileStage
@@ -835,6 +910,7 @@ export function Workspace({ groupId }: { groupId: string }) {
             setCaptureId(id);
           }}
           canArchive={data.group.owner === true}
+          canWrite={!lookOnly}
           onArchive={async (filenames) => {
             const res = await fetch(`/api/groups/${groupId}/files`, {
               method: "POST",

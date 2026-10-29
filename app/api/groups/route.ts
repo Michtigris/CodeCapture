@@ -1,6 +1,6 @@
 import { json } from "@/lib/http";
 import { getCurrentUser } from "@/lib/session";
-import { countForGroups, createGroup } from "@/lib/store";
+import { countForGroups, createGroup, memberGate } from "@/lib/store";
 import type { GroupSummary } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -18,6 +18,7 @@ export async function GET() {
         .filter((capture) => capture.groupId === group.id)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       const latest = captures[0];
+      const gate = memberGate(group, user.id);
       return {
         id: group.id,
         name: group.name,
@@ -33,6 +34,9 @@ export async function GET() {
         creatorName: snap.names[group.userId] || "Inconnu",
         lastCaptureAt: latest?.createdAt ?? null,
         owner: group.userId === user.id,
+        lookOnly: false,
+        access: gate.ok ? "ok" : gate.reason === "banned" ? "banned" : "kicked",
+        kickUntil: gate.until ?? 0,
       };
     });
   return json({ groups });

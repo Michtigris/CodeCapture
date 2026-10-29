@@ -36,6 +36,9 @@ export type GroupRecord = {
   intervalSec: number;
   createdAt: string;
   copiedIds: string[];
+  bannedIds: string[];
+  lookOnlyIds: string[];
+  kicks: Record<string, number>;
 };
 
 export type PhotoRecord = {
@@ -159,6 +162,18 @@ function repairGroups(db: DB): boolean {
       group.copiedIds = [];
       changed = true;
     }
+    if (!Array.isArray(group.bannedIds)) {
+      group.bannedIds = [];
+      changed = true;
+    }
+    if (!Array.isArray(group.lookOnlyIds)) {
+      group.lookOnlyIds = [];
+      changed = true;
+    }
+    if (!group.kicks || typeof group.kicks !== "object") {
+      group.kicks = {};
+      changed = true;
+    }
     const code = String(group.code || "").toUpperCase();
     if (!/^[A-Z]{5}$/.test(code) || used.has(code)) {
       group.code = nextCode(used);
@@ -175,6 +190,117 @@ function repairGroups(db: DB): boolean {
 export function isMember(group: GroupRecord | null | undefined, userId: string): group is GroupRecord {
   if (!group) return false;
   return group.userId === userId || group.memberIds?.includes(userId) === true;
+}
+
+export function isLookOnly(group: GroupRecord, userId: string) {
+  if (group.userId === userId) return false;
+  return (group.lookOnlyIds ?? []).includes(userId);
+}
+
+export function memberGate(group: GroupRecord, userId: string): {
+  ok: boolean;
+  reason?: "banned" | "kicked";
+  until?: number;
+} {
+  if (group.userId === userId) return { ok: true };
+  if ((group.bannedIds ?? []).includes(userId)) return { ok: false, reason: "banned" };
+  const until = group.kicks?.[userId] ?? 0;
+  if (until > Date.now()) return { ok: false, reason: "kicked", until };
+  return { ok: true };
+}
+
+export async function touchPresence(groupId: string, userId: string) {
+  const state = await readLive(groupId);
+  const now = Date.now();
+  const next = { ...(state.presence ?? {}) };
+  next[userId] = now;
+  for (const [id, at] of Object.entries(next)) {
+    if (now - at > 120_000) delete next[id];
+  }
+  if (next[userId] === state.presence?.[userId] && Object.keys(next).length === Object.keys(state.presence ?? {}).length) {
+    return;
+  }
+  await writeLive(groupId, { ...state, presence: next });
+}
+
+export type MemberRow = {
+  id: string;
+  name: string;
+  online: boolean;
+  banned: boolean;
+  lookOnly: boolean;
+  owner: boolean;
+};
+
+export async function listMembers(groupId: string): Promise<MemberRow[]> {
+  const group = await getGroup(groupId);
+  if (!group) return [];
+  const state = await readLive(groupId);
+  const now = Date.now();
+  return readThrough((db) => {
+    const names: Record<string, string> = {};
+    for (const user of db.users) names[user.id] = user.name;
+    const ids = [...new Set([group.userId, ...(group.memberIds ?? [])])];
+    return ids
+      .map((id) => {
+        const liveCamera = (state.devices ?? []).some(
+          (device) => device.userId === id && now - Date.parse(device.seenAt) < 45_000,
+        );
+        const present = (state.presence?.[id] ?? 0) > now - 60_000;
+        return {
+          id,
+          name: names[id] || "Membre",
+          online: liveCamera || present,
+          banned: (group.bannedIds ?? []).includes(id),
+          lookOnly: (group.lookOnlyIds ?? []).includes(id),
+          owner: id === group.userId,
+        };
+      })
+      .sort((a, b) => {
+        if (a.owner !== b.owner) return a.owner ? -1 : 1;
+        if (a.online !== b.online) return a.online ? -1 : 1;
+        return a.name.localeCompare(b.name, "fr", { sensitivity: "base" });
+      });
+  });
+}
+
+export type ModerateAction = "kick" | "ban" | "unban" | "look" | "unlook";
+
+export function moderateMember(
+  groupId: string,
+  actorId: string,
+  targetId: string,
+  action: ModerateAction,
+): Promise<{ ok: true } | { error: string; status: number }> {
+  return update((db) => {
+    const group = db.groups.find((item) => item.id === groupId);
+    if (!group) return { error: "Groupe introuvable.", status: 404 };
+    if (group.userId !== actorId) return { error: "Réservé au créateur du groupe.", status: 403 };
+    if (targetId === group.userId) return { error: "Impossible sur le créateur.", status: 400 };
+    if (!isMember(group, targetId)) return { error: "Membre introuvable.", status: 404 };
+    group.bannedIds = Array.isArray(group.bannedIds) ? group.bannedIds : [];
+    group.lookOnlyIds = Array.isArray(group.lookOnlyIds) ? group.lookOnlyIds : [];
+    group.kicks = group.kicks && typeof group.kicks === "object" ? group.kicks : {};
+    if (action === "kick") {
+      group.kicks[targetId] = Date.now() + 10_000;
+      return { ok: true as const };
+    }
+    if (action === "ban") {
+      if (!group.bannedIds.includes(targetId)) group.bannedIds.push(targetId);
+      delete group.kicks[targetId];
+      return { ok: true as const };
+    }
+    if (action === "unban") {
+      group.bannedIds = group.bannedIds.filter((id) => id !== targetId);
+      return { ok: true as const };
+    }
+    if (action === "look") {
+      if (!group.lookOnlyIds.includes(targetId)) group.lookOnlyIds.push(targetId);
+      return { ok: true as const };
+    }
+    group.lookOnlyIds = group.lookOnlyIds.filter((id) => id !== targetId);
+    return { ok: true as const };
+  });
 }
 
 async function readReady(): Promise<DB> {
@@ -485,6 +611,7 @@ type LiveDevice = {
 
 type LiveState = {
   devices: LiveDevice[];
+  presence: Record<string, number>;
   command: CameraCommand | null;
   watch: string | null;
   seq: number;
@@ -534,7 +661,7 @@ function freshCameras(groupId: string, devices: LiveDevice[], maxAge: number): C
 }
 
 function emptyLive(): LiveState {
-  return { devices: [], command: null, watch: null, seq: 0 };
+  return { devices: [], presence: {}, command: null, watch: null, seq: 0 };
 }
 
 async function readLive(groupId: string): Promise<LiveState> {
@@ -544,6 +671,7 @@ async function readLive(groupId: string): Promise<LiveState> {
     const data = JSON.parse(new TextDecoder().decode(loaded.body)) as Partial<LiveState>;
     return {
       devices: Array.isArray(data.devices) ? data.devices : [],
+      presence: data.presence && typeof data.presence === "object" ? data.presence : {},
       command: data.command ?? null,
       watch: data.watch ?? null,
       seq: data.seq ?? 0,
@@ -807,13 +935,26 @@ export function previewGroupByCode(code: string): Promise<GroupInvitePreview | n
   });
 }
 
-export function joinGroup(userId: string, code: string): Promise<GroupRecord | null> {
+export function joinGroup(
+  userId: string,
+  code: string,
+): Promise<GroupRecord | { error: "missing" | "banned" | "kicked"; until?: number }> {
   const wanted = code.trim().toUpperCase();
-  if (!/^[A-Z]{5}$/.test(wanted)) return Promise.resolve(null);
+  if (!/^[A-Z]{5}$/.test(wanted)) return Promise.resolve({ error: "missing" });
   return update((db) => {
     const group = db.groups.find((item) => item.code === wanted);
-    if (!group) return null;
+    if (!group) return { error: "missing" as const };
+    group.bannedIds = Array.isArray(group.bannedIds) ? group.bannedIds : [];
+    group.lookOnlyIds = Array.isArray(group.lookOnlyIds) ? group.lookOnlyIds : [];
+    group.kicks = group.kicks && typeof group.kicks === "object" ? group.kicks : {};
+    const gate = memberGate(group, userId);
+    if (!gate.ok) {
+      if (gate.reason === "banned") return { error: "banned" as const };
+      return { error: "kicked" as const, until: gate.until };
+    }
     if (!group.memberIds.includes(userId)) group.memberIds.push(userId);
+    const until = group.kicks[userId] ?? 0;
+    if (until && until <= Date.now()) delete group.kicks[userId];
     return group;
   });
 }
@@ -831,6 +972,9 @@ export function createGroup(userId: string, name: string): Promise<GroupRecord> 
       intervalSec: DEFAULT_INTERVAL,
       createdAt: new Date().toISOString(),
       copiedIds: [],
+      bannedIds: [],
+      lookOnlyIds: [],
+      kicks: {},
     };
     db.groups.push(group);
     return group;

@@ -1,7 +1,21 @@
 import { isInterval } from "@/lib/constants";
 import { json } from "@/lib/http";
 import { getCurrentUser } from "@/lib/session";
-import { getGroup, groupPeople, isMember, listLiveCameras, loadGroupBundle, pruneHistoryPhotos, rememberCopiedPhotos, updateGroup, deleteGroup } from "@/lib/store";
+import {
+  deleteGroup,
+  getGroup,
+  groupPeople,
+  isLookOnly,
+  isMember,
+  listLiveCameras,
+  listMembers,
+  loadGroupBundle,
+  memberGate,
+  pruneHistoryPhotos,
+  rememberCopiedPhotos,
+  touchPresence,
+  updateGroup,
+} from "@/lib/store";
 import type { CaptureDTO, PhotoDTO } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -14,6 +28,19 @@ async function ownedGroup(id: string) {
   if (!user) return { error: json({ error: "Connexion requise." }, 401) };
   const group = await getGroup(id);
   if (!group || !isMember(group, user.id)) return { error: json({ error: "Groupe introuvable." }, 404) };
+  const gate = memberGate(group, user.id);
+  if (!gate.ok) {
+    return {
+      error: json(
+        {
+          error: gate.reason === "banned" ? "Tu es banni de ce groupe." : "Tu es temporairement exclu.",
+          code: gate.reason,
+          until: gate.until ?? 0,
+        },
+        403,
+      ),
+    };
+  }
   return { user, group };
 }
 
@@ -21,12 +48,14 @@ export async function GET(_request: Request, ctx: Ctx) {
   const { id } = await ctx.params;
   const access = await ownedGroup(id);
   if ("error" in access && access.error) return access.error;
+  await touchPresence(id, access.user.id);
   await pruneHistoryPhotos();
   const bundle = await loadGroupBundle(id);
   if (!bundle) return json({ error: "Groupe introuvable." }, 404);
   const { group, photos, captures } = bundle;
   const cameras = await listLiveCameras(group.id);
   const people = await groupPeople(group.id);
+  const members = await listMembers(group.id);
   const photoDTOs: PhotoDTO[] = photos.map((photo) => ({
     id: photo.id,
     createdAt: photo.createdAt,
@@ -50,10 +79,11 @@ export async function GET(_request: Request, ctx: Ctx) {
       createdAt: group.createdAt,
       copiedIds: group.copiedIds ?? [],
       owner: group.userId === access.user.id,
+      lookOnly: isLookOnly(group, access.user.id),
     },
     photos: photoDTOs,
     captures: captureDTOs,
-    members: people.members,
+    members,
     cameras: cameras.map((camera) => ({
       deviceId: camera.deviceId,
       seenAt: camera.seenAt,

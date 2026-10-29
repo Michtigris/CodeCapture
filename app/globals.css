@@ -481,7 +481,83 @@ a.lime { display: inline-flex; align-items: center; justify-content: center; tex
   padding: 14px 16px;
 }
 .roster-pop ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.roster-pop li { font-size: 15px; letter-spacing: -0.02em; white-space: nowrap; }
+.roster-pop li {
+  font-size: 15px;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  position: relative;
+}
+.roster-on { color: var(--text); }
+.roster-off { color: #6f7468; }
+.roster-name { min-width: 0; }
+.roster-mod { position: relative; flex: 0 0 auto; }
+.roster-dots {
+  background: transparent;
+  border: none;
+  color: inherit;
+  padding: 0 4px;
+  letter-spacing: 0.08em;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.roster-dots:hover { color: var(--lime); }
+.roster-actions {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 8;
+  min-width: 150px;
+  display: grid;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+}
+.roster-actions button {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  padding: 10px 12px;
+}
+.roster-actions button:hover { background: var(--bg-3); color: var(--lime); }
+.roster-tag.ban { color: var(--danger); }
+.shard { position: relative; overflow: hidden; }
+.shard-kicked { filter: grayscale(0.85); opacity: 0.72; }
+.shard-banned { background: #090a08; }
+.shard-lock {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  z-index: 2;
+}
+.shard-lock.kicked {
+  background: rgba(14, 15, 12, 0.55);
+}
+.shard-lock-count {
+  font-family: var(--font-display), sans-serif;
+  font-size: clamp(64px, 12vw, 96px);
+  font-weight: 800;
+  line-height: 1;
+  color: rgba(243, 245, 239, 0.88);
+}
+.shard-lock.banned {
+  background: rgba(0, 0, 0, 0.72);
+}
+.shard-lock.banned span {
+  transform: rotate(-18deg);
+  font-family: var(--font-display), sans-serif;
+  font-size: clamp(28px, 5vw, 42px);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #ff4d3a;
+  text-transform: uppercase;
+}
 .roster-tag {
   color: var(--lime);
   font-family: var(--font-mono), ui-monospace, monospace;

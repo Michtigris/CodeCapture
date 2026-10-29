@@ -1,7 +1,16 @@
 import { SENSES, gapBySec, isGap, isInterval } from "@/lib/constants";
 import { json } from "@/lib/http";
 import { getCurrentUser } from "@/lib/session";
-import { getGroup, groupPeople, isMember, listLiveCameras, pushCameraCommand, touchCamera } from "@/lib/store";
+import {
+  getGroup,
+  groupPeople,
+  isLookOnly,
+  isMember,
+  listLiveCameras,
+  memberGate,
+  pushCameraCommand,
+  touchCamera,
+} from "@/lib/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +22,19 @@ async function owned(id: string) {
   if (!user) return { error: json({ error: "Connexion requise." }, 401) };
   const group = await getGroup(id);
   if (!group || !isMember(group, user.id)) return { error: json({ error: "Groupe introuvable." }, 404) };
+  const gate = memberGate(group, user.id);
+  if (!gate.ok) {
+    return {
+      error: json(
+        {
+          error: gate.reason === "banned" ? "Tu es banni de ce groupe." : "Tu es temporairement exclu.",
+          code: gate.reason,
+          until: gate.until ?? 0,
+        },
+        403,
+      ),
+    };
+  }
   return { user, group };
 }
 
@@ -52,6 +74,10 @@ export async function POST(request: Request, ctx: Ctx) {
   const action = String(body?.action ?? "");
   const targetId = String(body?.targetId ?? "");
   const deviceId = String(body?.deviceId ?? "");
+
+  if (isLookOnly(access.group, access.user.id)) {
+    return json({ error: "Mode lecture seule : caméra indisponible." }, 403);
+  }
 
   if (action === "command") {
     if (!/^[0-9a-f-]{16,80}$/i.test(targetId)) return json({ error: "Appareil invalide." }, 400);

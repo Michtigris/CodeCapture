@@ -20,6 +20,21 @@ function Ticker() {
   );
 }
 
+function KickClock({ until, onDone }: { until: number; onDone: () => void }) {
+  const [left, setLeft] = useState(() => Math.max(0, Math.ceil((until - Date.now()) / 1000)));
+  useEffect(() => {
+    const tick = () => {
+      const next = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+      setLeft(next);
+      if (next <= 0) onDone();
+    };
+    tick();
+    const id = window.setInterval(tick, 250);
+    return () => window.clearInterval(id);
+  }, [until, onDone]);
+  return <span className="shard-lock-count">{left}</span>;
+}
+
 export function GroupsScreen() {
   const router = useRouter();
   const [me, setMe] = useState<PublicUser | null>(null);
@@ -29,6 +44,7 @@ export function GroupsScreen() {
   const [joining, setJoining] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [, setClock] = useState(0);
 
   useEffect(() => {
     let stop = false;
@@ -51,6 +67,11 @@ export function GroupsScreen() {
       stop = true;
     };
   }, []);
+
+  async function refreshGroups() {
+    const groupsRes = await fetch("/api/groups", { cache: "no-store" });
+    if (groupsRes.ok) setGroups((await groupsRes.json()).groups);
+  }
 
   async function createGroup(event: FormEvent) {
     event.preventDefault();
@@ -94,12 +115,15 @@ export function GroupsScreen() {
     if (!res.ok) {
       setError(data.error || "Ce code ne correspond à aucun groupe.");
       setJoining(false);
+      await refreshGroups();
       return;
     }
     router.push(`/${data.group.code}`);
   }
 
   function openGroup(group: GroupSummary) {
+    if (group.access === "banned") return;
+    if (group.access === "kicked" && group.kickUntil > Date.now()) return;
     router.push(group.code ? `/${group.code}` : `/groupe/${group.id}`);
   }
 
@@ -118,8 +142,10 @@ export function GroupsScreen() {
   const active = ordered.filter((group) => !archived.includes(group));
 
   function GroupCard({ group }: { group: GroupSummary }) {
+    const kicked = group.access === "kicked" && group.kickUntil > Date.now();
+    const banned = group.access === "banned";
     return (
-      <article className="shard">
+      <article className={["shard", banned ? "shard-banned" : "", kicked ? "shard-kicked" : ""].filter(Boolean).join(" ")}>
         <i className="tick tl" />
         <i className="tick tr" />
         <i className="tick bl" />
@@ -146,9 +172,25 @@ export function GroupsScreen() {
             <dd>{formatWhen(group.createdAt)}</dd>
           </div>
         </dl>
-        <button type="button" className="cp" onClick={() => openGroup(group)}>
+        <button type="button" className="cp" disabled={banned || kicked} onClick={() => openGroup(group)}>
           Ouvrir
         </button>
+        {banned ? (
+          <div className="shard-lock banned" aria-hidden="true">
+            <span>BANNI !</span>
+          </div>
+        ) : null}
+        {kicked ? (
+          <div className="shard-lock kicked" aria-hidden="true">
+            <KickClock
+              until={group.kickUntil}
+              onDone={() => {
+                setClock((n) => n + 1);
+                void refreshGroups();
+              }}
+            />
+          </div>
+        ) : null}
       </article>
     );
   }
@@ -201,7 +243,7 @@ export function GroupsScreen() {
               </div>
               <div className="join-actions">
                 <form className="creator" autoComplete="off" onSubmit={createGroup}>
-              <input className="autofill-trap" tabIndex={-1} autoComplete="username" aria-hidden="true" defaultValue="" />
+                  <input className="autofill-trap" tabIndex={-1} autoComplete="username" aria-hidden="true" defaultValue="" />
                   <input
                     value={name}
                     onChange={(event) => setName(event.target.value)}
@@ -231,21 +273,23 @@ export function GroupsScreen() {
                 </form>
               </div>
             </div>
-            {active.length === 0 ? (
-              <p className="empty">Tes groupes sont archivés. Tu peux toujours en créer ou en rejoindre un.</p>
-            ) : (
-              <div className="group-grid">{active.map((group) => <GroupCard key={group.id} group={group} />)}</div>
-            )}
+            <div className="shards">
+              {active.map((group) => (
+                <GroupCard key={group.id} group={group} />
+              ))}
+            </div>
             {archived.length ? (
               <details className="archived">
-                <summary>Archivés · {archived.length}</summary>
-                <p className="muted">Plus de 5 groupes : ceux de plus d’une semaine sont ici.</p>
-                <div className="group-grid">
+                <summary>Groupes plus anciens · {archived.length}</summary>
+                <div className="shards">
                   {archived.map((group) => (
                     <GroupCard key={group.id} group={group} />
                   ))}
                 </div>
               </details>
+            ) : null}
+            {!active.length && !archived.length ? (
+              <p className="empty">Tes groupes sont archivés. Tu peux toujours en créer ou en rejoindre un.</p>
             ) : null}
           </>
         )}

@@ -1,7 +1,7 @@
 import { json } from "@/lib/http";
 import { sniffImage } from "@/lib/sniff";
 import { getCurrentUser } from "@/lib/session";
-import { addPhoto, deleteHistoryPhotos, getGroup, isMember } from "@/lib/store";
+import { addPhoto, deleteHistoryPhotos, getGroup, isLookOnly, isMember } from "@/lib/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +16,7 @@ export async function POST(request: Request, ctx: Ctx) {
   if (!user) return json({ error: "Connexion requise." }, 401);
   const group = await getGroup(id);
   if (!group || !isMember(group, user.id)) return json({ error: "Groupe introuvable." }, 404);
+  if (isLookOnly(group, user.id)) return json({ error: "Mode lecture seule." }, 403);
 
   const form = await request.formData();
   const file = form.get("photo");

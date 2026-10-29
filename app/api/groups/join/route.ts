@@ -9,13 +9,21 @@ export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return json({ error: "Connexion requise." }, 401);
   const body = await request.json().catch(() => null);
-  const group = await joinGroup(user.id, String(body?.code ?? ""));
-  if (!group) return json({ error: "Ce code ne correspond à aucun groupe." }, 404);
+  const result = await joinGroup(user.id, String(body?.code ?? ""));
+  if (!result || "error" in result) {
+    if (result && "error" in result && result.error === "banned") {
+      return json({ error: "Tu es banni de ce groupe.", code: "banned" }, 403);
+    }
+    if (result && "error" in result && result.error === "kicked") {
+      return json({ error: "Tu es temporairement exclu.", code: "kicked", until: result.until ?? 0 }, 403);
+    }
+    return json({ error: "Ce code ne correspond à aucun groupe." }, 404);
+  }
   return json({
     group: {
-      id: group.id,
-      name: group.name,
-      code: group.code,
+      id: result.id,
+      name: result.name,
+      code: result.code,
     },
   });
 }

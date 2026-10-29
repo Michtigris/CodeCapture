@@ -30,6 +30,16 @@ export type GroupDTO = {
   createdAt: string;
   copiedIds: string[];
   owner: boolean;
+  lookOnly: boolean;
+};
+
+export type MemberDTO = {
+  id: string;
+  name: string;
+  online: boolean;
+  banned: boolean;
+  lookOnly: boolean;
+  owner: boolean;
 };
 
 export type CameraDTO = {
@@ -50,7 +60,7 @@ export type GroupPayload = {
   photos: PhotoDTO[];
   captures: CaptureDTO[];
   cameras: CameraDTO[];
-  members: string[];
+  members: MemberDTO[];
 };
 
 export type GroupSummary = GroupDTO & {
@@ -61,6 +71,8 @@ export type GroupSummary = GroupDTO & {
   creatorName: string;
   lastCaptureAt: string | null;
   owner: boolean;
+  access: "ok" | "banned" | "kicked";
+  kickUntil: number;
 };
 
 export type PublicUser = {

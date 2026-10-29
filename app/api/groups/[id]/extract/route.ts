@@ -3,7 +3,7 @@ import { MAX_PHOTOS_PER_SEND } from "@/lib/constants";
 import { json } from "@/lib/http";
 import { mimeFor } from "@/lib/sniff";
 import { getCurrentUser, resolveOpenAIKey } from "@/lib/session";
-import { addCapture, getGroup, isMember, listPhotos, readPhotoBytes } from "@/lib/store";
+import { addCapture, getGroup, isLookOnly, isMember, listPhotos, readPhotoBytes } from "@/lib/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +17,7 @@ export async function POST(request: Request, ctx: Ctx) {
   if (!user) return json({ error: "Connexion requise." }, 401);
   const group = await getGroup(id);
   if (!group || !isMember(group, user.id)) return json({ error: "Groupe introuvable." }, 404);
+  if (isLookOnly(group, user.id)) return json({ error: "Mode lecture seule." }, 403);
 
   const body = await request.json().catch(() => ({}));
   const includeSent = body?.all === true;

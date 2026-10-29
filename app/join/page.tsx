@@ -14,8 +14,8 @@ export default async function Page({
   const upper = code.toUpperCase();
   const user = await getCurrentUser();
   if (!user) redirect(`/?next=/${upper}`);
-  const group = await joinGroup(user.id, upper);
-  if (!group) redirect("/groupes");
+  const result = await joinGroup(user.id, upper);
+  if (!result || "error" in result) redirect("/groupes");
   if (code !== upper) redirect(`/${upper}`);
-  return <Workspace groupId={group.id} />;
+  return <Workspace groupId={result.id} />;
 }
