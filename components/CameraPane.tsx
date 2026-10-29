@@ -452,6 +452,31 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
     setGap(saved);
   }, [groupId]);
 
+  useEffect(() => {
+    let saved = true;
+    try {
+      const raw = localStorage.getItem(`cc_follow_${groupId}`);
+      if (raw === "0" || raw === "false") saved = false;
+      else if (raw === "1" || raw === "true") saved = true;
+    } catch {
+      saved = true;
+    }
+    followRef.current = saved;
+    setFollow(saved);
+  }, [groupId]);
+
+  function rememberFollow(on: boolean) {
+    followRef.current = on;
+    if (!on && zoomRef.current < 1) zoomRef.current = 1;
+    setFollow(on);
+    setLocked(false);
+    try {
+      localStorage.setItem(`cc_follow_${groupId}`, on ? "1" : "0");
+    } catch {
+      /* navigation privée */
+    }
+  }
+
   function rememberGap(sec: GapSec) {
     if (gapRef.current !== sec) {
       baselineRef.current = null;
@@ -531,8 +556,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
           return;
         }
         if (command.action === "start") {
-          followRef.current = true;
-          setFollow(true);
+          rememberFollow(true);
           try {
             if (!readyRef.current) await enableRef.current(facingRef.current);
             if (streamRef.current && !runningRef.current) {
@@ -738,11 +762,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   }
 
   function toggleFollow() {
-    const next = !followRef.current;
-    followRef.current = next;
-    if (!next && zoomRef.current < 1) zoomRef.current = 1;
-    setFollow(next);
-    setLocked(false);
+    rememberFollow(!followRef.current);
   }
 
   function disableCamera() {
@@ -766,8 +786,7 @@ export function CameraPane({ groupId, cameras, intervalSec, onIntervalChange, on
   }
 
   async function activate() {
-    followRef.current = true;
-    setFollow(true);
+    rememberFollow(true);
     await enableCamera(facingRef.current);
     if (!streamRef.current) return;
     leadRef.current = true;
