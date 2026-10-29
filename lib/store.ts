@@ -626,6 +626,7 @@ function controlPath(groupId: string): string {
 }
 
 async function readControl(groupId: string): Promise<Pick<LiveState, "command" | "watch" | "seq">> {
+  if (!r2Configured()) return { command: null, watch: null, seq: 0 };
   try {
     const loaded = await r2Get(controlPath(groupId));
     if (!loaded) return { command: null, watch: null, seq: 0 };
@@ -665,6 +666,7 @@ function emptyLive(): LiveState {
 }
 
 async function readLive(groupId: string): Promise<LiveState> {
+  if (!r2Configured()) return emptyLive();
   try {
     const loaded = await r2Get(livePath(groupId));
     if (!loaded) return emptyLive();
