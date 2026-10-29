@@ -692,18 +692,20 @@ export function FileStage({ captures, photos, captureId, onSelectCapture, onSave
                 </button>
                 {menu ? (
                   <div className="dot-pop" role="menu">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void presentCode(current.filename, current.content).then(({ text }) => {
-                          setDraft(text);
-                          setEditing(true);
-                          setMenu(false);
-                        });
-                      }}
-                    >
-                      Modifier
-                    </button>
+                    {canArchive ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void presentCode(current.filename, current.content).then(({ text }) => {
+                            setDraft(text);
+                            setEditing(true);
+                            setMenu(false);
+                          });
+                        }}
+                      >
+                        Modifier
+                      </button>
+                    ) : null}
                     <button type="button" onClick={() => void copyAllCode()}>
                       Copier tout le code
                     </button>
