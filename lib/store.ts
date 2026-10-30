@@ -236,6 +236,7 @@ export async function listMembers(groupId: string): Promise<MemberRow[]> {
   const group = await getGroup(groupId);
   if (!group) return [];
   const state = await readLive(groupId);
+  const cameras = await listLiveCameras(groupId);
   const now = Date.now();
   return readThrough((db) => {
     const names: Record<string, string> = {};
@@ -243,9 +244,7 @@ export async function listMembers(groupId: string): Promise<MemberRow[]> {
     const ids = [...new Set([group.userId, ...(group.memberIds ?? [])])];
     return ids
       .map((id) => {
-        const liveCamera = (state.devices ?? []).some(
-          (device) => device.userId === id && now - Date.parse(device.seenAt) < 45_000,
-        );
+        const liveCamera = cameras.some((camera) => camera.userId === id);
         const present = (state.presence?.[id] ?? 0) > now - 60_000;
         return {
           id,
@@ -639,6 +638,7 @@ async function readControl(groupId: string): Promise<Pick<LiveState, "command" |
 }
 
 async function writeControl(groupId: string, control: Pick<LiveState, "command" | "watch" | "seq">) {
+  if (storageMode() === "file" || !r2Configured()) return;
   await r2Put(controlPath(groupId), JSON.stringify(control), "application/json");
 }
 
@@ -665,12 +665,13 @@ function emptyLive(): LiveState {
   return { devices: [], presence: {}, command: null, watch: null, seq: 0 };
 }
 
-async function readLive(groupId: string): Promise<LiveState> {
-  if (!r2Configured()) return emptyLive();
+function liveFile(groupId: string) {
+  return path.join(DATA_DIR, "live", `${groupId}.json`);
+}
+
+function parseLive(raw: string): LiveState {
   try {
-    const loaded = await r2Get(livePath(groupId));
-    if (!loaded) return emptyLive();
-    const data = JSON.parse(new TextDecoder().decode(loaded.body)) as Partial<LiveState>;
+    const data = JSON.parse(raw) as Partial<LiveState>;
     return {
       devices: Array.isArray(data.devices) ? data.devices : [],
       presence: data.presence && typeof data.presence === "object" ? data.presence : {},
@@ -678,6 +679,26 @@ async function readLive(groupId: string): Promise<LiveState> {
       watch: data.watch ?? null,
       seq: data.seq ?? 0,
     };
+  } catch {
+    return emptyLive();
+  }
+}
+
+async function readLive(groupId: string): Promise<LiveState> {
+  if (storageMode() === "file") {
+    try {
+      const file = liveFile(groupId);
+      if (!fs.existsSync(file)) return emptyLive();
+      return parseLive(fs.readFileSync(file, "utf8"));
+    } catch {
+      return emptyLive();
+    }
+  }
+  if (!r2Configured()) return emptyLive();
+  try {
+    const loaded = await r2Get(livePath(groupId));
+    if (!loaded) return emptyLive();
+    return parseLive(new TextDecoder().decode(loaded.body));
   } catch (error) {
     if (isMissing(error)) return emptyLive();
     throw error;
@@ -685,6 +706,13 @@ async function readLive(groupId: string): Promise<LiveState> {
 }
 
 async function writeLive(groupId: string, state: LiveState) {
+  if (storageMode() === "file") {
+    const dir = path.join(DATA_DIR, "live");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(liveFile(groupId), JSON.stringify(state));
+    return;
+  }
+  if (!r2Configured()) return;
   await r2Put(livePath(groupId), JSON.stringify(state), "application/json");
 }
 

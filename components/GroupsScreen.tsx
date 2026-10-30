@@ -174,9 +174,11 @@ export function GroupsScreen() {
             <dd>{formatWhen(group.createdAt)}</dd>
           </div>
         </dl>
-        <button type="button" className="cp" disabled={banned || kicked} onClick={() => openGroup(group)}>
-          Ouvrir
-        </button>
+        <div className="shard-foot">
+          <button type="button" className="cp-line" disabled={banned || kicked} onClick={() => openGroup(group)}>
+            Ouvrir
+          </button>
+        </div>
         {banned ? (
           <div className="shard-lock banned" aria-hidden="true">
             <span>BANNI !</span>
