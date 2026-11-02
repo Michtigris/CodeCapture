@@ -366,7 +366,14 @@ export function CameraPane({
       const range = track ? zoomRangeOf(track) : null;
       zoomRangeRef.current = range;
       nativeBrokenRef.current = !range;
-      if (track) await focusTrack(track).catch(() => undefined);
+      if (track) {
+        await settleFocus(track).catch(() => undefined);
+        window.setTimeout(() => {
+          if (streamRef.current?.getVideoTracks()[0] === track) {
+            void settleFocus(track).catch(() => undefined);
+          }
+        }, 450);
+      }
       zoomRef.current = savedZoom();
       hardwareZoomRef.current = null;
       cropRef.current = FULL;
@@ -414,7 +421,14 @@ export function CameraPane({
       const range = track ? zoomRangeOf(track) : null;
       zoomRangeRef.current = range;
       nativeBrokenRef.current = !range;
-      if (track) await focusTrack(track).catch(() => undefined);
+      if (track) {
+        await settleFocus(track).catch(() => undefined);
+        window.setTimeout(() => {
+          if (streamRef.current?.getVideoTracks()[0] === track) {
+            void settleFocus(track).catch(() => undefined);
+          }
+        }, 450);
+      }
       zoomRef.current = savedZoom();
       hardwareZoomRef.current = null;
       cropRef.current = FULL;
@@ -734,6 +748,16 @@ export function CameraPane({
   }, [ready]);
 
   useEffect(() => {
+    if (!ready) return;
+    const timer = window.setInterval(() => {
+      const track = streamRef.current?.getVideoTracks()[0];
+      if (!track || track.readyState !== "live") return;
+      void settleFocus(track).catch(() => undefined);
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [ready]);
+
+  useEffect(() => {
     const finder = finderRef.current;
     if (!finder || !ready) return;
     const distance = (touches: TouchList) => {
@@ -741,18 +765,57 @@ export function CameraPane({
       const dy = touches[0].clientY - touches[1].clientY;
       return Math.hypot(dx, dy) || 1;
     };
+    let tapX = 0;
+    let tapY = 0;
+    let tapOk = false;
     const start = (event: TouchEvent) => {
-      if (event.touches.length === 2) pinchRef.current = { dist: distance(event.touches), zoom: zoomRef.current };
+      if (event.touches.length === 2) {
+        pinchRef.current = { dist: distance(event.touches), zoom: zoomRef.current };
+        tapOk = false;
+        return;
+      }
+      if (event.touches.length === 1) {
+        tapX = event.touches[0].clientX;
+        tapY = event.touches[0].clientY;
+        tapOk = true;
+      }
     };
     const move = (event: TouchEvent) => {
-      if (event.touches.length !== 2 || !pinchRef.current) return;
-      event.preventDefault();
-      const nextZoom = clampZoom(pinchRef.current.zoom * (distance(event.touches) / pinchRef.current.dist));
-      rememberZoom(nextZoom);
-      pushNativeZoom();
+      if (event.touches.length === 2 && pinchRef.current) {
+        event.preventDefault();
+        const nextZoom = clampZoom(pinchRef.current.zoom * (distance(event.touches) / pinchRef.current.dist));
+        rememberZoom(nextZoom);
+        pushNativeZoom();
+        tapOk = false;
+        return;
+      }
+      if (tapOk && event.touches.length === 1) {
+        const dx = event.touches[0].clientX - tapX;
+        const dy = event.touches[0].clientY - tapY;
+        if (Math.hypot(dx, dy) > 14) tapOk = false;
+      }
     };
-    const end = () => {
+    const end = (event: TouchEvent) => {
+      const wasPinch = !!pinchRef.current;
       pinchRef.current = null;
+      if (wasPinch || !tapOk || event.changedTouches.length !== 1) {
+        tapOk = false;
+        return;
+      }
+      const touch = event.changedTouches[0];
+      if (Math.hypot(touch.clientX - tapX, touch.clientY - tapY) > 14) return;
+      const track = streamRef.current?.getVideoTracks()[0];
+      if (!track) return;
+      const box = finder.getBoundingClientRect();
+      if (!box.width || !box.height) return;
+      const nx = Math.min(1, Math.max(0, (touch.clientX - box.left) / box.width));
+      const ny = Math.min(1, Math.max(0, (touch.clientY - box.top) / box.height));
+      const crop = cropRef.current;
+      let x = crop.x + nx * crop.w;
+      const y = crop.y + ny * crop.h;
+      if (facingRef.current === "user") x = 1 - x;
+      void focusAt(track, x, y).catch(() => undefined);
+      tapOk = false;
     };
     finder.addEventListener("touchstart", start, { passive: true });
     finder.addEventListener("touchmove", move, { passive: false });
@@ -1261,26 +1324,85 @@ function openPhoneCamera(facing: "environment" | "user") {
       facingMode: { ideal: facing },
       width: { ideal: 1920 },
       height: { ideal: 1440 },
-    },
+      // Chrome Android : active l’AF dès l’ouverture
+      focusMode: { ideal: "continuous" },
+    } as MediaTrackConstraints,
   });
 }
 
-async function focusTrack(track: MediaStreamTrack) {
-  const caps = track.getCapabilities?.() as {
-    focusMode?: string[];
-    pointsOfInterest?: unknown;
-  } | undefined;
-  const advanced: Record<string, unknown> = {};
-  if (caps?.focusMode?.includes("continuous")) advanced.focusMode = "continuous";
-  else if (caps?.focusMode?.includes("single-shot")) advanced.focusMode = "single-shot";
-  if (caps?.pointsOfInterest) advanced.pointsOfInterest = [{ x: 0.5, y: 0.5 }];
-  if (!Object.keys(advanced).length) return;
-  await track.applyConstraints({ advanced: [advanced as MediaTrackConstraintSet] });
+type FocusCaps = {
+  focusMode?: string[];
+  pointsOfInterest?: boolean;
+};
+
+function trackFocusCaps(track: MediaStreamTrack): FocusCaps {
+  return (track.getCapabilities?.() as FocusCaps | undefined) ?? {};
+}
+
+async function applyFocusMode(track: MediaStreamTrack, mode: string) {
+  try {
+    await track.applyConstraints({
+      advanced: [{ focusMode: mode } as MediaTrackConstraintSet],
+    });
+    return;
+  } catch {
+    /* certains navigateurs acceptent le mode hors advanced */
+  }
+  await track.applyConstraints({ focusMode: mode } as MediaTrackConstraints);
+}
+
+async function settleFocus(track: MediaStreamTrack) {
+  if (track.readyState !== "live") return;
+  const caps = trackFocusCaps(track);
+  const modes = caps.focusMode ?? [];
+  if (modes.includes("continuous")) {
+    await applyFocusMode(track, "continuous");
+    return;
+  }
+  if (modes.includes("single-shot")) {
+    await applyFocusMode(track, "single-shot");
+    return;
+  }
+  // Safari / WebKit : pas d’API focusMode, mais on tente quand même
+  try {
+    await applyFocusMode(track, "continuous");
+  } catch {
+    /* pas supporté */
+  }
+}
+
+async function focusAt(track: MediaStreamTrack, x: number, y: number) {
+  if (track.readyState !== "live") return;
+  const caps = trackFocusCaps(track);
+  const point = {
+    x: Math.min(1, Math.max(0, x)),
+    y: Math.min(1, Math.max(0, y)),
+  };
+  if (caps.pointsOfInterest) {
+    try {
+      if (caps.focusMode?.includes("single-shot")) {
+        await track.applyConstraints({
+          advanced: [{ focusMode: "single-shot", pointsOfInterest: [point] } as MediaTrackConstraintSet],
+        });
+      } else {
+        await track.applyConstraints({
+          advanced: [{ pointsOfInterest: [point] } as MediaTrackConstraintSet],
+        });
+      }
+    } catch {
+      /* point de focus refusé */
+    }
+  } else if (caps.focusMode?.includes("single-shot")) {
+    await applyFocusMode(track, "single-shot").catch(() => undefined);
+  }
+  window.setTimeout(() => {
+    void settleFocus(track).catch(() => undefined);
+  }, 700);
 }
 
 async function applyDeviceZoom(track: MediaStreamTrack, zoom: number) {
-  const caps = track.getCapabilities?.() as { focusMode?: string[] } | undefined;
-  if (caps?.focusMode?.includes("continuous")) {
+  const caps = trackFocusCaps(track);
+  if (caps.focusMode?.includes("continuous")) {
     try {
       await track.applyConstraints({
         advanced: [{ zoom, focusMode: "continuous" } as MediaTrackConstraintSet],
@@ -1291,7 +1413,7 @@ async function applyDeviceZoom(track: MediaStreamTrack, zoom: number) {
     }
   }
   await track.applyConstraints({ advanced: [{ zoom } as MediaTrackConstraintSet] });
-  await focusTrack(track).catch(() => undefined);
+  await settleFocus(track).catch(() => undefined);
 }
 
 function explainCamera(error: unknown): string {
