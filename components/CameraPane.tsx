@@ -5,7 +5,7 @@ import { AUTO_INTERVAL, GAPS, INTERVALS, SENSES, gapBySec, isAutoInterval, isGap
 import type { CameraDTO } from "@/lib/types";
 import { deviceId, readCameraChoice, readPcCameras, writeCameraChoice, writePcCameras, type PcCamera } from "./device";
 import { formatRemain } from "./format";
-import { frameFromVideo, frameMatchingView } from "./images";
+import { capturePhoto } from "./images";
 import { clampZoom, detectTarget, frameAtZoom, frameOnTarget, FULL, medianRect, pageShift, placeVideo, smoothLock, type NormRect } from "./targetLock";
 import { TipButton } from "./TipButton";
 
@@ -207,10 +207,26 @@ export function CameraPane({
     const finder = finderRef.current;
     if (!video) throw new Error("La caméra n'est pas prête.");
     if (!video.videoWidth) await waitForFrame(video);
+    const track = streamRef.current?.getVideoTracks()[0] ?? null;
+    // Pique la mise au point avant la photo (comme l’app Photo)
+    if (track) {
+      try {
+        await settleFocus(track);
+        await new Promise((resolve) => window.setTimeout(resolve, 180));
+      } catch {
+        /* continue quand même */
+      }
+    }
     setFlash(true);
     window.setTimeout(() => setFlash(false), 140);
-    const blob =
-      !wideRef.current && finder ? await frameMatchingView(video, finder) : await frameFromVideo(video, cropRef.current);
+    const matchFinder = !wideRef.current && !!finder;
+    const blob = await capturePhoto({
+      video,
+      track,
+      finder,
+      matchFinder,
+      crop: matchFinder ? undefined : cropRef.current,
+    });
     await onCaptureRef.current(blob);
   }
   shootRef.current = shoot;
@@ -363,6 +379,7 @@ export function CameraPane({
       window.setTimeout(releaseHold, 700);
       await video.play();
       const track = stream.getVideoTracks()[0];
+      if (track) await preferMaxResolution(track).catch(() => undefined);
       const range = track ? zoomRangeOf(track) : null;
       zoomRangeRef.current = range;
       nativeBrokenRef.current = !range;
@@ -398,7 +415,10 @@ export function CameraPane({
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
-        video: { width: { ideal: 1920 }, height: { ideal: 1440 } },
+        video: {
+          width: { ideal: 3840 },
+          height: { ideal: 2160 },
+        },
       });
       if (!selectedIdRef.current.startsWith("pc:")) {
         stream.getTracks().forEach((track) => track.stop());
@@ -418,6 +438,7 @@ export function CameraPane({
       }
       video.srcObject = stream;
       await video.play();
+      if (track) await preferMaxResolution(track).catch(() => undefined);
       const range = track ? zoomRangeOf(track) : null;
       zoomRangeRef.current = range;
       nativeBrokenRef.current = !range;
@@ -1258,7 +1279,7 @@ export function CameraPane({
             </div>
             <p className="hint">
               {ready
-                ? "Suivi recadre sur le tableau, l’écran ou la feuille, et suit si le téléphone bouge."
+                ? "Touche l’écran pour refaire la mise au point. Suivi recadre sur le tableau, l’écran ou la feuille."
                 : "Garde cette page ouverte. Le même compte doit être connecté sur l’ordinateur."}
             </p>
           </>
@@ -1322,12 +1343,31 @@ function openPhoneCamera(facing: "environment" | "user") {
     audio: false,
     video: {
       facingMode: { ideal: facing },
-      width: { ideal: 1920 },
-      height: { ideal: 1440 },
+      // Vise le capteur plein format ; ImageCapture.takePhoto fera le vrai still.
+      width: { ideal: 4032 },
+      height: { ideal: 3024 },
       // Chrome Android : active l’AF dès l’ouverture
       focusMode: { ideal: "continuous" },
     } as MediaTrackConstraints,
   });
+}
+
+/** Monte la résolution du flux au max supporté (meilleure frame de secours). */
+async function preferMaxResolution(track: MediaStreamTrack) {
+  const caps = track.getCapabilities?.() as
+    | { width?: { max?: number; min?: number }; height?: { max?: number; min?: number } }
+    | undefined;
+  const maxW = caps?.width?.max;
+  const maxH = caps?.height?.max;
+  if (!maxW || !maxH) return;
+  try {
+    await track.applyConstraints({
+      width: { ideal: maxW },
+      height: { ideal: maxH },
+    });
+  } catch {
+    /* certains appareils refusent le plafond */
+  }
 }
 
 type FocusCaps = {

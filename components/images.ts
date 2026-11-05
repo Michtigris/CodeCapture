@@ -1,3 +1,8 @@
+/** Longueur max du côté le plus long — assez haut pour rester net (OCR / détail). */
+export const PHOTO_MAX_EDGE = 4096;
+/** Qualité JPEG proche d’une appli Photo native. */
+export const PHOTO_JPEG_QUALITY = 0.92;
+
 export async function fileToJpeg(file: File): Promise<Blob> {
   const bitmap = await loadBitmap(file);
   try {
@@ -7,11 +12,51 @@ export async function fileToJpeg(file: File): Promise<Blob> {
   }
 }
 
+/**
+ * Capture une vraie photo (ImageCapture) quand le navigateur le permet,
+ * sinon repli sur une frame vidéo. Évite le flou / grain du preview caméra.
+ */
+export async function capturePhoto(options: {
+  video: HTMLVideoElement;
+  track?: MediaStreamTrack | null;
+  finder?: HTMLElement | null;
+  /** Recadrage normalisé 0–1 (zoom logiciel). */
+  crop?: { x: number; y: number; w: number; h: number };
+  matchFinder?: boolean;
+}): Promise<Blob> {
+  const video = options.video;
+  if (!video.videoWidth || !video.videoHeight) {
+    throw new Error("La caméra n'est pas prête.");
+  }
+
+  const mirror = isMirrored(video);
+  const track = options.track ?? trackFromVideo(video);
+
+  if (track && typeof ImageCapture !== "undefined") {
+    try {
+      const still = await takeStillBlob(track);
+      const bitmap = await createImageBitmap(still);
+      try {
+        const region = resolveRegion(video, bitmap.width, bitmap.height, options);
+        return await renderRegion(bitmap, region, mirror);
+      } finally {
+        bitmap.close?.();
+      }
+    } catch {
+      /* fallback frame vidéo */
+    }
+  }
+
+  if (options.matchFinder && options.finder) {
+    return frameMatchingView(video, options.finder);
+  }
+  return frameFromVideo(video, options.crop);
+}
+
 export function frameMatchingView(video: HTMLVideoElement, finder: HTMLElement): Promise<Blob> {
   const region = visibleSource(video, finder);
   if (!region) return frameFromVideo(video);
-  const transform = video.style.transform || getComputedStyle(video).transform;
-  const mirror = transform.includes("scaleX(-1)") || transform.startsWith("matrix(-1");
+  const mirror = isMirrored(video);
   return drawJpeg(
     Math.round(region.sw),
     Math.round(region.sh),
@@ -22,8 +67,8 @@ export function frameMatchingView(video: HTMLVideoElement, finder: HTMLElement):
       }
       ctx.drawImage(video, region.sx, region.sy, region.sw, region.sh, 0, 0, width, height);
     },
-    1800,
-    0.86,
+    PHOTO_MAX_EDGE,
+    PHOTO_JPEG_QUALITY,
   );
 }
 
@@ -71,8 +116,8 @@ function visibleSource(video: HTMLVideoElement, finder: HTMLElement) {
 export function frameFromVideo(
   video: HTMLVideoElement,
   crop?: { x: number; y: number; w: number; h: number },
-  maxEdge = 1800,
-  quality = 0.86,
+  maxEdge = PHOTO_MAX_EDGE,
+  quality = PHOTO_JPEG_QUALITY,
 ): Promise<Blob> {
   if (!video.videoWidth || !video.videoHeight) {
     return Promise.reject(new Error("La caméra n'est pas prête."));
@@ -85,7 +130,94 @@ export function frameFromVideo(
   return drawJpeg(sw, sh, (ctx, w, h) => ctx.drawImage(video, sx, sy, sw, sh, 0, 0, w, h), maxEdge, quality);
 }
 
-async function loadBitmap(file: File): Promise<ImageBitmap> {
+function isMirrored(video: HTMLVideoElement) {
+  const transform = video.style.transform || getComputedStyle(video).transform;
+  return transform.includes("scaleX(-1)") || transform.startsWith("matrix(-1");
+}
+
+function trackFromVideo(video: HTMLVideoElement): MediaStreamTrack | null {
+  const stream = video.srcObject;
+  if (!(stream instanceof MediaStream)) return null;
+  return stream.getVideoTracks()[0] ?? null;
+}
+
+async function takeStillBlob(track: MediaStreamTrack): Promise<Blob> {
+  const Capture = (globalThis as unknown as { ImageCapture?: typeof ImageCapture }).ImageCapture;
+  if (!Capture) throw new Error("ImageCapture indisponible");
+  const capture = new Capture(track);
+  // Demande la plus grande photo possible si l’API l’expose
+  try {
+    const caps = await capture.getPhotoCapabilities?.();
+    const sizes = (caps as { imageWidth?: { max?: number }; imageHeight?: { max?: number } } | undefined) ?? {};
+    const width = sizes.imageWidth?.max;
+    const height = sizes.imageHeight?.max;
+    if (width && height) {
+      return await capture.takePhoto({ imageWidth: width, imageHeight: height } as PhotoSettings);
+    }
+  } catch {
+    /* takePhoto sans options */
+  }
+  return await capture.takePhoto();
+}
+
+function resolveRegion(
+  video: HTMLVideoElement,
+  photoW: number,
+  photoH: number,
+  options: {
+    finder?: HTMLElement | null;
+    crop?: { x: number; y: number; w: number; h: number };
+    matchFinder?: boolean;
+  },
+) {
+  const scaleX = photoW / video.videoWidth;
+  const scaleY = photoH / video.videoHeight;
+
+  if (options.matchFinder && options.finder) {
+    const src = visibleSource(video, options.finder);
+    if (src) {
+      return {
+        sx: src.sx * scaleX,
+        sy: src.sy * scaleY,
+        sw: src.sw * scaleX,
+        sh: src.sh * scaleY,
+      };
+    }
+  }
+
+  const crop = options.crop ?? { x: 0, y: 0, w: 1, h: 1 };
+  const sx = Math.max(0, crop.x * photoW);
+  const sy = Math.max(0, crop.y * photoH);
+  const sw = Math.max(1, Math.min(photoW - sx, crop.w * photoW));
+  const sh = Math.max(1, Math.min(photoH - sy, crop.h * photoH));
+  return { sx, sy, sw, sh };
+}
+
+function renderRegion(
+  bitmap: ImageBitmap,
+  region: { sx: number; sy: number; sw: number; sh: number },
+  mirror: boolean,
+) {
+  const sx = Math.max(0, Math.round(region.sx));
+  const sy = Math.max(0, Math.round(region.sy));
+  const sw = Math.max(1, Math.min(bitmap.width - sx, Math.round(region.sw)));
+  const sh = Math.max(1, Math.min(bitmap.height - sy, Math.round(region.sh)));
+  return drawJpeg(
+    sw,
+    sh,
+    (ctx, width, height) => {
+      if (mirror) {
+        ctx.translate(width, 0);
+        ctx.scale(-1, 1);
+      }
+      ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, width, height);
+    },
+    PHOTO_MAX_EDGE,
+    PHOTO_JPEG_QUALITY,
+  );
+}
+
+async function loadBitmap(file: File | Blob): Promise<ImageBitmap> {
   try {
     return await createImageBitmap(file);
   } catch {
@@ -108,8 +240,8 @@ function drawJpeg(
   sourceWidth: number,
   sourceHeight: number,
   draw: (ctx: CanvasRenderingContext2D, width: number, height: number) => void,
-  maxEdge = 1600,
-  quality = 0.82,
+  maxEdge = PHOTO_MAX_EDGE,
+  quality = PHOTO_JPEG_QUALITY,
 ): Promise<Blob> {
   const scale = Math.min(1, maxEdge / Math.max(sourceWidth, sourceHeight));
   const width = Math.max(1, Math.round(sourceWidth * scale));
@@ -119,7 +251,8 @@ function drawJpeg(
   canvas.height = height;
   const ctx = canvas.getContext("2d");
   if (!ctx) return Promise.reject(new Error("Impossible de préparer la photo."));
-  ctx.imageSmoothingEnabled = true;
+  // Pas de flou artificiel si on ne réduit pas
+  ctx.imageSmoothingEnabled = scale < 0.999;
   ctx.imageSmoothingQuality = "high";
   draw(ctx, width, height);
   return new Promise((resolve, reject) => {
@@ -130,4 +263,3 @@ function drawJpeg(
     );
   });
 }
-
