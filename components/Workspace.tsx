@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { CHAT_PROMPT, DEFAULT_BRIEF, MAX_PHOTOS_PER_SEND } from "@/lib/constants";
 import { INSERT_DAY_MS, parseInsert } from "@/lib/insert";
 import type { GroupPayload, MemberDTO, PublicUser } from "@/lib/types";
@@ -68,7 +69,10 @@ export function Workspace({ groupId }: { groupId: string }) {
   const [nameLive, setNameLive] = useState(false);
   const [rosterOpen, setRosterOpen] = useState(false);
   const [modMenu, setModMenu] = useState<string | null>(null);
+  const [rosterBox, setRosterBox] = useState<{ top: number; left: number } | null>(null);
   const rosterRef = useRef<HTMLDivElement>(null);
+  const rosterBtnRef = useRef<HTMLButtonElement>(null);
+  const rosterPopRef = useRef<HTMLDivElement>(null);
   const [insertDot, setInsertDot] = useState<"idle" | "ok" | "bad" | "same">("idle");
   const [focusFile, setFocusFile] = useState<{ name: string; nonce: number } | null>(null);
   const insertLock = useRef(false);
@@ -262,9 +266,32 @@ export function Workspace({ groupId }: { groupId: string }) {
   }, [openPhoto]);
 
   useEffect(() => {
+    if (!rosterOpen) {
+      setRosterBox(null);
+      return;
+    }
+    const place = () => {
+      const btn = rosterBtnRef.current;
+      if (!btn) return;
+      const box = btn.getBoundingClientRect();
+      setRosterBox({ top: box.bottom + 8, left: box.left });
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [rosterOpen, data?.members?.length]);
+
+  useEffect(() => {
     if (!rosterOpen) return;
     function onPointer(event: PointerEvent) {
-      if (!rosterRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const inBtn = !!rosterRef.current?.contains(target);
+      const inPop = !!rosterPopRef.current?.contains(target);
+      if (!inBtn && !inPop) {
         setRosterOpen(false);
         setModMenu(null);
       }
@@ -616,6 +643,7 @@ export function Workspace({ groupId }: { groupId: string }) {
             {data.group.code ? <span className="group-code">{data.group.code}</span> : null}
             <div className="roster" ref={rosterRef}>
               <button
+                ref={rosterBtnRef}
                 type="button"
                 className="roster-btn"
                 aria-expanded={rosterOpen}
@@ -625,72 +653,81 @@ export function Workspace({ groupId }: { groupId: string }) {
                 Membre {(data.members ?? []).filter((row) => row.online).length}/{(data.members ?? []).length || 1}
                 <span className="roster-caret" aria-hidden="true" />
               </button>
-              {rosterOpen ? (
-                <div className="roster-pop shard" role="listbox" aria-label="Membres du groupe">
-                  <i className="tick tl" />
-                  <i className="tick tr" />
-                  <i className="tick bl" />
-                  <i className="tick br" />
-                  <ul>
-                    {(data.members ?? []).map((row) => (
-                      <li key={row.id} role="option" className={row.online ? "roster-on" : "roster-off"}>
-                        <span className="roster-name">
-                          {row.name}
-                          {row.owner ? (
-                            <span className="roster-crown" title="Créateur du groupe" aria-label="Créateur du groupe">
-                              <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
-                                <path
-                                  d="M3 8.5 7.2 13 12 5l4.8 8L21 8.5V18H3V8.5Z"
-                                  fill="currentColor"
-                                />
-                              </svg>
+              {rosterOpen && rosterBox
+                ? createPortal(
+                    <div
+                      ref={rosterPopRef}
+                      className="roster-pop"
+                      role="listbox"
+                      aria-label="Membres du groupe"
+                      style={{ top: rosterBox.top, left: rosterBox.left }}
+                    >
+                      <i className="tick tl" />
+                      <i className="tick tr" />
+                      <i className="tick bl" />
+                      <i className="tick br" />
+                      <ul>
+                        {(data.members ?? []).map((row) => (
+                          <li key={row.id} role="option" className={row.online ? "roster-on" : "roster-off"}>
+                            <span className="roster-name">
+                              {row.name}
+                              {row.owner ? (
+                                <span className="roster-crown" title="Créateur du groupe" aria-label="Créateur du groupe">
+                                  <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path
+                                      d="M3 8.5 7.2 13 12 5l4.8 8L21 8.5V18H3V8.5Z"
+                                      fill="currentColor"
+                                    />
+                                  </svg>
+                                </span>
+                              ) : null}
+                              {row.banned ? <span className="roster-tag ban"> banni</span> : null}
+                              {row.lookOnly && !row.banned ? <span className="roster-tag"> lecture</span> : null}
                             </span>
-                          ) : null}
-                          {row.banned ? <span className="roster-tag ban"> banni</span> : null}
-                          {row.lookOnly && !row.banned ? <span className="roster-tag"> lecture</span> : null}
-                        </span>
-                        {data.group.owner && !row.owner ? (
-                          <span className="roster-mod">
-                            <button
-                              type="button"
-                              className="roster-dots"
-                              aria-label={`Actions pour ${row.name}`}
-                              aria-expanded={modMenu === row.id}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setModMenu((current) => (current === row.id ? null : row.id));
-                              }}
-                            >
-                              ···
-                            </button>
-                            {modMenu === row.id ? (
-                              <div className="roster-actions" role="menu">
-                                <button type="button" role="menuitem" onClick={() => void moderate(row.id, "kick")}>
-                                  Kick
-                                </button>
+                            {data.group.owner && !row.owner ? (
+                              <span className="roster-mod">
                                 <button
                                   type="button"
-                                  role="menuitem"
-                                  onClick={() => void moderate(row.id, row.banned ? "unban" : "ban")}
+                                  className="roster-dots"
+                                  aria-label={`Actions pour ${row.name}`}
+                                  aria-expanded={modMenu === row.id}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setModMenu((current) => (current === row.id ? null : row.id));
+                                  }}
                                 >
-                                  {row.banned ? "Débannir" : "Bannir"}
+                                  ···
                                 </button>
-                                <button
-                                  type="button"
-                                  role="menuitem"
-                                  onClick={() => void moderate(row.id, row.lookOnly ? "unlook" : "look")}
-                                >
-                                  {row.lookOnly ? "Fin lecture seule" : "Look only"}
-                                </button>
-                              </div>
+                                {modMenu === row.id ? (
+                                  <div className="roster-actions" role="menu">
+                                    <button type="button" role="menuitem" onClick={() => void moderate(row.id, "kick")}>
+                                      Kick
+                                    </button>
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      onClick={() => void moderate(row.id, row.banned ? "unban" : "ban")}
+                                    >
+                                      {row.banned ? "Débannir" : "Bannir"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      onClick={() => void moderate(row.id, row.lookOnly ? "unlook" : "look")}
+                                    >
+                                      {row.lookOnly ? "Fin lecture seule" : "Look only"}
+                                    </button>
+                                  </div>
+                                ) : null}
+                              </span>
                             ) : null}
-                          </span>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>,
+                    document.body,
+                  )
+                : null}
             </div>
           </div>
         </div>

@@ -481,6 +481,8 @@ a.lime { display: inline-flex; align-items: center; justify-content: center; tex
 
 .workspace { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 .groupbar {
+  position: relative;
+  z-index: 50;
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
@@ -488,6 +490,7 @@ a.lime { display: inline-flex; align-items: center; justify-content: center; tex
   gap: 5px 12px;
   padding: 5px;
   border-bottom: 1px solid var(--line);
+  overflow: visible;
 }
 .group-stats { margin: 0; font-size: 13px; color: var(--muted); }
 .group-actions > button,
@@ -567,12 +570,16 @@ a.lime { display: inline-flex; align-items: center; justify-content: center; tex
   border-bottom: 5px solid currentColor;
 }
 .roster-pop {
-  position: absolute;
-  top: calc(100% + 12px);
-  left: 0;
-  z-index: 40;
+  position: fixed;
+  z-index: 200;
   min-width: 240px;
   padding: 14px 16px;
+  display: block;
+  background:
+    linear-gradient(135deg, rgba(214, 255, 74, 0.07), transparent 32%),
+    var(--bg-2);
+  border: 1px solid var(--line);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
 }
 .roster-pop ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .roster-pop li {
