@@ -211,21 +211,24 @@ export function CameraPane({
     // Pique la mise au point avant la photo (comme l’app Photo)
     if (track) {
       try {
-        await settleFocus(track);
-        await new Promise((resolve) => window.setTimeout(resolve, 180));
+        const crop = cropRef.current;
+        await prepareStillShot(track, video, {
+          x: crop.x + crop.w / 2,
+          y: crop.y + crop.h / 2,
+        });
       } catch {
         /* continue quand même */
       }
     }
     setFlash(true);
     window.setTimeout(() => setFlash(false), 140);
-    const matchFinder = !wideRef.current && !!finder;
+    // Recadrage via cropRef (suivi / zoom) en résolution capteur, pas via le preview CSS
     const blob = await capturePhoto({
       video,
       track,
       finder,
-      matchFinder,
-      crop: matchFinder ? undefined : cropRef.current,
+      crop: cropRef.current,
+      matchFinder: false,
     });
     await onCaptureRef.current(blob);
   }
@@ -1348,6 +1351,10 @@ function openPhoneCamera(facing: "environment" | "user") {
       height: { ideal: 3024 },
       // Chrome Android : active l’AF dès l’ouverture
       focusMode: { ideal: "continuous" },
+      // Moins de “vidéo floue” côté navigateur quand c’est supporté
+      resizeMode: { ideal: "none" },
+      // Écrans lumineux : un peu moins d’exposition évite le voile
+      exposureCompensation: { ideal: -0.3 },
     } as MediaTrackConstraints,
   });
 }
@@ -1355,19 +1362,70 @@ function openPhoneCamera(facing: "environment" | "user") {
 /** Monte la résolution du flux au max supporté (meilleure frame de secours). */
 async function preferMaxResolution(track: MediaStreamTrack) {
   const caps = track.getCapabilities?.() as
-    | { width?: { max?: number; min?: number }; height?: { max?: number; min?: number } }
+    | {
+        width?: { max?: number; min?: number };
+        height?: { max?: number; min?: number };
+        exposureCompensation?: { min?: number; max?: number; step?: number };
+        exposureMode?: string[];
+        whiteBalanceMode?: string[];
+        resizeMode?: string[];
+      }
     | undefined;
   const maxW = caps?.width?.max;
   const maxH = caps?.height?.max;
-  if (!maxW || !maxH) return;
-  try {
-    await track.applyConstraints({
-      width: { ideal: maxW },
-      height: { ideal: maxH },
-    });
-  } catch {
-    /* certains appareils refusent le plafond */
+  const next: MediaTrackConstraints = {};
+  if (maxW && maxH) {
+    next.width = { ideal: maxW };
+    next.height = { ideal: maxH };
   }
+  if (caps?.resizeMode?.includes("none")) {
+    (next as Record<string, unknown>).resizeMode = "none";
+  }
+  if (caps?.exposureMode?.includes("continuous")) {
+    (next as Record<string, unknown>).exposureMode = "continuous";
+  }
+  if (caps?.whiteBalanceMode?.includes("continuous")) {
+    (next as Record<string, unknown>).whiteBalanceMode = "continuous";
+  }
+  const expo = caps?.exposureCompensation;
+  if (expo && typeof expo.min === "number" && typeof expo.max === "number") {
+    const wanted = Math.max(expo.min, Math.min(expo.max, -0.4));
+    (next as Record<string, unknown>).exposureCompensation = wanted;
+  }
+  if (!Object.keys(next).length) return;
+  try {
+    await track.applyConstraints(next);
+  } catch {
+    if (maxW && maxH) {
+      try {
+        await track.applyConstraints({ width: { ideal: maxW }, height: { ideal: maxH } });
+      } catch {
+        /* certains appareils refusent le plafond */
+      }
+    }
+  }
+}
+
+/** AF single-shot + courte pause pour laisser le verre bouger avant le cliché. */
+async function prepareStillShot(
+  track: MediaStreamTrack,
+  video: HTMLVideoElement,
+  point: { x: number; y: number },
+) {
+  const caps = trackFocusCaps(track);
+  if (caps.pointsOfInterest) {
+    try {
+      await focusAt(track, point.x, point.y);
+    } catch {
+      /* ignore */
+    }
+  } else if (caps.focusMode?.includes("single-shot")) {
+    await applyFocusMode(track, "single-shot").catch(() => undefined);
+  } else {
+    await settleFocus(track).catch(() => undefined);
+  }
+  await waitForFrame(video).catch(() => undefined);
+  await new Promise((resolve) => window.setTimeout(resolve, 320));
 }
 
 type FocusCaps = {

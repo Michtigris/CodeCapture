@@ -1,5 +1,5 @@
 import { PHOTO_BATCH } from "./constants";
-import { decodeCodeEntities } from "./insert";
+import { decodeCodeEntities, stripLineEscapes } from "./insert";
 import { placeName } from "./paths";
 import type { ExtractedFile } from "./types";
 
@@ -11,7 +11,8 @@ Règles :
 - Un fichier déjà reconstruit garde son dossier. Tu ne le déplaces pas. S'il était dans DIVERS et qu'il doit ensuite vivre avec un autre fichier, tu laisses DIVERS/Nom.ext tel quel et tu ajoutes un second fichier du même nom dans le nouveau dossier.
 - Plusieurs photos du même fichier : fusionne-les en une seule version complète, dans l'ordre de lecture (haut du fichier, puis la suite).
 - Recopie ce qui est lisible tel quel. N'embellis pas une ligne clairement visible.
-- N'écris jamais [illisible]. Si un morceau est coupé, flou ou absent, mets le code le plus probable pour que le fichier s'exécute. S'il manque le début et qu'une fonction est appelée sans être définie, ajoute <?php et crée cette fonction. Si une photo suivante montre le vrai texte, remplace ce que tu avais deviné.
+- N'écris jamais [illisible]. N'invente pas de fonction, classe ou commentaire absents de la photo « pour que ça compile ». Si quelques caractères sont flous, garde la forme (/* … */, SELECT *) et ne complète que ces caractères un par un. Une photo plus claire remplace la conjecture.
+- Aucun échappement markdown dans content : /* Query() */ et SELECT *, jamais /\\* ni \\*/ ni SELECT \\*.
 - Le champ content est le fichier brut, sans balises markdown, sans backticks et sans entités HTML. Un espace s'écrit espace, jamais &#x20; ni &nbsp;.
 - Si aucun code n'est lisible, renvoie files vide et explique pourquoi dans notes.
 - Réponds uniquement avec un objet JSON.
@@ -205,7 +206,7 @@ function sanitizeFile(raw: unknown): ExtractedFile | null {
   const rawContent = record.content ?? record.code ?? "";
   let content = typeof rawContent === "string" ? rawContent : String(rawContent);
   content = content.replace(/\0/g, "").replace(/\r\n/g, "\n").replace(/^```[a-zA-Z0-9]*\n/, "").replace(/\n```$/, "");
-  content = decodeCodeEntities(content);
+  content = stripLineEscapes(decodeCodeEntities(content));
   if (!content.trim()) return null;
   if (content.length > 200000) content = content.slice(0, 200000);
   const language = String(record.language || languageFromName(filename)).slice(0, 40);

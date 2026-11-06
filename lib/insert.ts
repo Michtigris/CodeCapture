@@ -14,13 +14,28 @@ const NAMED_ENTITIES: Record<string, string> = {
 };
 
 export function stripLineEscapes(value: string): string {
-  const lines = value.split("\n");
-  if (lines.length < 3) return value;
+  let text = stripMarkdownStarEscapes(value);
+  const lines = text.split("\n");
+  if (lines.length < 3) return text;
   const escaped = lines.filter((line) => /\\[ \t]*$/.test(line)).length;
-  if (escaped / lines.length < 0.5) return value;
+  if (escaped / lines.length < 0.5) return text;
   return lines
     .map((line) => line.replace(/\\[ \t]*$/, "").replace(/\\(?=[<>])/g, ""))
     .join("\n");
+}
+
+/** Les modèles markdown-isent souvent /* → /\* et SELECT * → SELECT \* */
+function stripMarkdownStarEscapes(value: string): string {
+  if (!/\\[*_#`]/.test(value)) return value;
+  const escaped = (value.match(/\\\*/g) ?? []).length;
+  const bare = (value.match(/(?<!\\)\*/g) ?? []).length;
+  const commentish = /\/\\\*|\\\*\//.test(value);
+  if (!commentish && escaped > 0 && escaped <= bare) {
+    // Peu de \* : seulement nettoyer _ # ` si présents, laisser les \* ambigus
+    if (!/\\[_#`]/.test(value)) return value;
+    return value.replace(/(?<!\\)\\([_#`])/g, "$1");
+  }
+  return value.replace(/(?<!\\)\\([*_#`])/g, "$1");
 }
 
 export function decodeCodeEntities(value: string): string {

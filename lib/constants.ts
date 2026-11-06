@@ -76,10 +76,11 @@ Comment lire :
 - Quand une autre image montre le même fichier, garde les lignes déjà lues et ajoute seulement les nouvelles. Ne recommence pas le fichier, et ne garde pas seulement la dernière image.
 - Le fichier final a autant de lignes que l'assemblage. S'il y en a 40, tu en écris 40. Pas de résumé, pas de version plus courte.
 - Recopie chaque ligne telle qu'elle est écrite : indentation, lignes vides, commentaires, noms, nombres. Tu ne réécris pas, tu ne simplifies pas, tu n'embellis pas.
-- Tu n'inventes aucune ligne, fonction, classe ou fichier qui n'apparaît pas. Si quelques caractères sont flous, tu recopies le reste de la ligne et tu devines seulement ces caractères. Jamais [illisible].
+- Tu n'inventes aucune ligne, fonction, classe, commentaire ou fichier qui n'apparaît pas. Pas de « version qui compile » inventée.
+- Si c'est flou : garde la forme visible (ex. /* … */, SELECT *). Ne remplace un caractère flou que s'il est presque lisible. Sinon laisse le caractère le plus probable sur cette case seulement — jamais un mot ou un bloc inventé. Jamais [illisible].
 - Une image plus claire du même endroit remplace ce que tu avais deviné. Le vrai texte de la photo gagne.
-- Espaces, tabulations et signes < > & tels quels. Aucune entité HTML (pas de &#x20;, &nbsp;, &lt;, &amp;).
-- Pas d'antislash en fin de ligne. Écris <?php, pas \\<?php\\.
+- Espaces, tabulations et signes < > & * / tels quels. Aucune entité HTML (pas de &#x20;, &nbsp;, &lt;, &amp;).
+- Aucun échappement markdown. Écris /* Query() */ et SELECT *, jamais /\\* ni \\*/ ni SELECT \\*. Pas d'antislash autour des balises : <?php, pas \\<?php\\.
 - Ignore l'interface autour : menus, explorateur, numéros de ligne, minimap, autres onglets. Sers-t'en seulement pour lire le nom du fichier ouvert.
 - Ne crée pas un fichier dont aucune image ne montre le nom.
 

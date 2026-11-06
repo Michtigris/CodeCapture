@@ -365,14 +365,58 @@ export function FileStage({
     setMenu(false);
   }, [focusFile, placed, onSelectCapture]);
 
+  function pickAfterArchive(removed: Set<string>, fromFolder: string | null): Placed | null {
+    const remaining = placed.open.filter((row) => !removed.has(row.file.filename));
+    if (!remaining.length) return null;
+
+    if (fromFolder !== null) {
+      const before = placed.open.filter((row) => row.folder === fromFolder);
+      const idx = before.findIndex((row) => row.file.filename === tab);
+      if (idx >= 0) {
+        const nextInFolder = before.slice(idx + 1).find((row) => !removed.has(row.file.filename));
+        if (nextInFolder) return nextInFolder;
+        const prevInFolder = [...before.slice(0, idx)].reverse().find((row) => !removed.has(row.file.filename));
+        if (prevInFolder) return prevInFolder;
+      } else {
+        const same = remaining.find((row) => row.folder === fromFolder);
+        if (same) return same;
+      }
+
+      const folderOrder = folders.length ? folders : [...new Set(placed.open.map((row) => row.folder))];
+      const at = folderOrder.indexOf(fromFolder);
+      const order =
+        at >= 0
+          ? [...folderOrder.slice(at + 1), ...folderOrder.slice(0, at)]
+          : folderOrder.filter((name) => name !== fromFolder);
+      for (const name of order) {
+        const first = remaining.find((row) => row.folder === name);
+        if (first) return first;
+      }
+    }
+
+    return remaining[0] ?? null;
+  }
+
   async function archiveNames(names: string[], message: string) {
     if (!onArchive || !names.length) return false;
+    const removed = new Set(names);
+    const leaving = names.includes(tab);
+    const fromFolder = leaving ? (located?.folder ?? activeFolder) : null;
+    const next = leaving ? pickAfterArchive(removed, fromFolder) : null;
     try {
       await onArchive(names);
       undos.current.push({ kind: "files", names });
-      if (names.includes(tab)) {
-        setTab(CAPTURE_TAB);
-        setFolder(null);
+      if (leaving) {
+        if (next) {
+          onSelectCapture(next.captureId);
+          setFolder(next.folder);
+          setTab(next.file.filename);
+        } else {
+          setTab(CAPTURE_TAB);
+          setFolder(null);
+        }
+        setEditing(false);
+        setMenu(false);
       }
       onToast(message);
       return true;
@@ -430,9 +474,7 @@ export function FileStage({
     const label = folderLabel(folderName);
     const count = names.length;
     if (!window.confirm(`Archiver le dossier ${label} et ${count} fichier${count > 1 ? "s" : ""} ? Ctrl+Z les ramène.`)) return;
-    void archiveNames(names, "Dossier archivé").then((ok) => {
-      if (ok && activeFolder === folderName) setFolder(null);
-    });
+    void archiveNames(names, "Dossier archivé");
   }
 
   function dropPad(name: string) {
